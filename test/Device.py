@@ -14,24 +14,26 @@ class Device(metaclass=ABCMeta):
         print("DeviceObjID: {0}, Location: {1}, pin: {2} Initiated".format(str(self.device_object_id), str(self.location), str(self.gpio_pin)))
 
     @abstractmethod
-    def run_sensor(self):
-        pass
+    def run_sensor(self, hooks=None):
+        if (hooks != None):
+            for hook in hooks:
+                hook()
 
-    def loop(self):
+    def loop(self, hooks=None):
         counter = 0
         self._flagstop = False
         print("Reading Interval: " + str(self._interval))
         while counter <=3: #change to true, this only for testing.
             if self._flagstop: return
-            self.run_sensor()
+            self.run_sensor(hooks)
             counter += 1
             if self._flagstop: return
             time.sleep(self._interval)
 
-    def start_loop(self, interval=0):
+    def start_loop(self, interval=0, hooks=None):
         if interval > 0: self._interval = interval
         print("Device " + self.device_object_id + " Loop starting...")
-        self.thread = threading.Thread(target=self.loop)
+        self.thread = threading.Thread(target=self.loop, args=[hooks])
         if self.thread.isAlive() == False:
             self.thread.start()
         return self
