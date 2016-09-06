@@ -13,21 +13,18 @@ class DHT(Device):
 
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
-            setattr(self, key, value)
-        
+            setattr(self, key, value)        
         Device.__init__(self)
         self._interval = 5 # 5S delay for reading job
         self.dhtsensortype = self.dhtsensors["11"]
 
-    def run_sensor(self, hooks=None):
+    def _run_sensor(self, **kwargs):
         self.lastreading = datetime.now()
-        print("Getting Current Reading at {0}".format(str(self.lastreading)))
+        print("{0} Reading at {1}".format(str(self.device_object_id), str(self.lastreading)))
         self.humidity, self.temperature = Adafruit_DHT.read_retry(self.dhtsensortype, self.gpio_pin)
-        #self.temperature = '{0:0.2f}C'.format(temperature)
-        #self.humidity = '{0:0.2f}%'.format(humidity)
-        Device.run_sensor(self, hooks)
         return self    
     
-    def stop_loop(self):
-        Device.stop_loop(self)
+    def loop_stop(self):
+        Device.loop_stop(self)
         print("Last Reading at " +  str(self.lastreading) + " Temperature " + str(self.temperature) + ", Humidity " + str(self.humidity))
+        return self
