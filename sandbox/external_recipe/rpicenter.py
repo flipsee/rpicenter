@@ -4,6 +4,8 @@ from Led import Led
 import RPi.GPIO as GPIO
 import time
 
+threads = []
+
 def main():
     try:
         GPIO.setmode(GPIO.BCM)
@@ -27,7 +29,7 @@ def main():
         dht1recipes = []        #if temp = 30 then blink red led.
         dht1recipes.append(["POST",lambda: print("Temp above 30C!") if (dht.temperature > 30) else None])
         dht1recipes.append(["POST",lambda: print("Temp below 30C") if (dht.temperature < 30) else None])
-        dht1recipes.append(["POST",lambda: redLed.loop_start(hooks=redLedrecipes) if (dht.temperature == 30) else None])
+        dht1recipes.append(["POST",lambda: threads.append(redLed.loop_start()) if (dht.temperature == 30) else None])
 
         print("--- Loading Recipies ---")
         greenLed._hooks = greenLedrecipes
@@ -48,7 +50,6 @@ def main():
         time.sleep(2)
     
         print("--- Thread Call ---")
-        threads = []
         threads.append(dht.loop_start())        
         #threads.append(redLed.loop_start())
         #threads.append(greenLed.loop_start())
@@ -74,6 +75,9 @@ def main():
 
 def exit_handler():    
     print("App terminated, cleanup!")
+    for item in threads:
+        item.loop_stop()
+    #how to wait that all the threads is off?
     GPIO.cleanup()
 
 if __name__ == '__main__':
