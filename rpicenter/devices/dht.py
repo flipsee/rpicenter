@@ -1,6 +1,6 @@
-from rpicenter import Device
+from . import Device, command
 from datetime import datetime
-import rpicenter
+#import rpicenter
 import Adafruit_DHT #library for the the DHT sensor.
 
 class DHT(Device):
@@ -11,7 +11,7 @@ class DHT(Device):
 
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
         #print("dht init")
-        super(DHT, self).__init__(device_object_id, slot, gpio_pin, location, is_local)
+        super(DHT,self).__init__(device_object_id, slot, gpio_pin, location, is_local)
         self._sensor_type = self.dhtsensors["11"]
         #self._temperature = 999
         #self._humidity = 999
@@ -19,12 +19,12 @@ class DHT(Device):
         self._read_interval = self.min_read_interval
         self.__run_sensor__()
 
-    @rpicenter.command
+    @command
     def temperature(self):
         self.__run_sensor__()
         return self._temperature
 
-    @rpicenter.command
+    @command
     def humidity(self):
         self.__run_sensor__()
         return self._humidity

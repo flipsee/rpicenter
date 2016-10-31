@@ -1,5 +1,6 @@
-from rpicenter import Device
-import rpicenter
+from . import Device, command
+#from rpicenter import Device
+#import rpicenter
 
 import time
 
@@ -19,7 +20,7 @@ class Display(Device):
     #SPI_DEVICE = 0
 
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
-        super(Display, self).__init__(device_object_id, slot, gpio_pin, location, is_local)
+        super(Display,self).__init__(device_object_id, slot, gpio_pin, location, is_local)
 
         self.disp = Adafruit_SSD1306.SSD1306_128_32(rst=self.RST)
         self.disp.begin()
@@ -37,7 +38,7 @@ class Display(Device):
         self.font = ImageFont.load_default()
         #print("Initiating Display")
 
-    @rpicenter.command
+    @command
     def clear(self):
         # Clear display.
         #print("Clearing Display")
@@ -45,21 +46,25 @@ class Display(Device):
         self.disp.display()    
         return self    
 
-    @rpicenter.command
+    @command
     def show_message(self, msg, x=1, y=1):
         #print("Showing Msg")
         self.draw.text((x, y), str(msg),  font=self.font, fill=255)
         self.__display__()
         return self
 
-    @rpicenter.command
+    @command
     def show_image(self, imgName):
         #print("Showing Image")
         self.image = Image.open(imgName).resize((self.disp.width, self.disp.height), Image.ANTIALIAS).convert('1')
         self.__display__()
         return self
     
+    def cleanup(self):
+        self.clear()
+
     def __display__(self):
         self.disp.image(self.image)
         self.disp.display()
         return self
+
