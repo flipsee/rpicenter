@@ -16,11 +16,12 @@ class BaseModel(Model):
         database = database
 
 class Devices(BaseModel):
-    DeviceObjectID = CharField(db_column='DeviceObjectID', null=True, unique=True, primary_key=True)
+    DeviceObjectID = TextField(db_column='DeviceObjectID', null=True, unique=True, primary_key=True)
     Slot = TextField(db_column='Slot', null=False)
-    GPIOPin = DecimalField(db_column='GPIOPin', null=True)
-    Location = DecimalField(db_column='Location', null=False)
+    GPIOPin = IntegerField(db_column='GPIOPin', null=True)
+    Location = TextField(db_column='Location', null=False)
     IsLocal = TextField(db_column='IsLocal', null=False)
+    Type = TextField(db_column='Type', null=False)    
     class Meta:
         db_table = 'Devices'
 
@@ -37,18 +38,18 @@ class rpicenterBL(object):
 
     ##### Devices Table - Start #####
     def get_devices(self):
-        return Device.select()
+        return Devices.select()
     
     def clear_devices(self):
-        q = Device.delete()
+        q = Devices.delete()
         q.execute()
 
     def add_Devices(self, rows):
-        Device.insert_many(rows).execute()        
+        Devices.insert_many(rows).execute()        
 
-    def add_Device(self, DeviceObjectID, Slot, Location, IsLocal, GPIOPin):
+    def add_Device(self, DeviceObjectID, Slot, Location, IsLocal, GPIOPin, Type):
         try:
-            BusStop.create(DeviceObjectID=DeviceObjectID, Slot=Slot, Location=Location, IsLocal=IsLocal, GPIOPin=GPIOPin)
+            Devices.create(DeviceObjectID=DeviceObjectID, Slot=Slot, Location=Location, IsLocal=IsLocal, GPIOPin=GPIOPin, Type=Type)
         except IntegrityError:
             raise ValueError("Data already exists.")
     ##### Devices Table - Stop #####

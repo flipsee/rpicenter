@@ -70,6 +70,12 @@ def is_device_exists(device):
 def gpio_setmode(gpio_mode):
     GPIO.setmode(gpio_mode)
 
+def get_device(device_object_id=None):    
+    for d in _devices:
+        if d.device_object_id == device_object_id:
+            return d
+    return None
+
 
 _plugins = glob.glob(os.path.join(os.path.dirname(__file__), "*.py"))
 __all__ = [os.path.splitext(os.path.basename(f))[0] for f in _plugins

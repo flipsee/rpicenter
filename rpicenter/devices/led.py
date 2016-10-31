@@ -5,7 +5,6 @@ from datetime import datetime
 
 class Led(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
-        #print("led init")
         super(Led, self).__init__(device_object_id, slot, gpio_pin, location, is_local)
         GPIO.setup(self.gpio_pin, GPIO.OUT)
         self.off() #reset
