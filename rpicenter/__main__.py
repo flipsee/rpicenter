@@ -1,3 +1,4 @@
+import configparser
 import paho.mqtt.client as mqtt
 import RPi.GPIO as GPIO
 import time
@@ -9,9 +10,6 @@ except SystemError:
 
 import devices
 from devices import *
-#from devices.dht import DHT
-#from devices.led import Led
-#from devices.display import Display
 
 #1. load all devices from db.
 #2. load recipies.
@@ -26,6 +24,8 @@ def insert_sample():
             db.add_Device(DeviceObjectID="GreenLed", Slot="2", Location="Living Room", GPIOPin=19, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="BlueLed", Slot="3", Location="Living Room", GPIOPin=13, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
+
+            #db.add_Device(DeviceObjectID="Button1", Slot="5", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
     finally:
         db.close()
 
@@ -51,7 +51,7 @@ def send_message(topic, message):
 
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
-    client.subscribe("rpicenter/#")
+    client.subscribe(client_topic)
 
 def on_message(client, userdata, msg):
     print(msg.topic+" "+str(msg.payload))
@@ -82,7 +82,6 @@ def run_command(msg):
 
 def main():
     try:
-        devices.gpio_setmode(GPIO.BCM) #change this to board.
         load_devices()
 
         if client is not None:
@@ -106,8 +105,6 @@ def list_devices():
 
 def test():
     try:        
-        devices.gpio_setmode(GPIO.BCM) #change this to board.
-
         load_devices()    
         #dhtSensor = dev.register_device(device_object_id="DHT1", slot="0", location="Living Room", gpio_pin=5, type="DHT")
         #redLed = Led(device_object_id="Red-Led", slot="1", location="Living Room", gpio_pin=26)
@@ -138,12 +135,28 @@ def test():
         exit_handler()
 
 client = None #mqtt.Client()
+client_topic = None
 if client is not None:
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("localhost", 1999, 60)
+
+def innit():
+    cfg = configparser.ConfigParser()
+    configname = 'rpicenter.conf'
+    if os.path.exists(configname): #check the config file in the caller path
+        cfg.read(configname)
+    else: #if not found check the config in the source path
+        cfg.read(os.path.join(os.path.abspath(os.path.dirname(__file__)),configname))
+
+    config = cfg["DEFAULT"]
+
+    devices.gpio_setmode(eval("GPIO." + str(config["gpio_type"])))
+    if client is not None:
+        client.connect(config["mqtt_server"], config["mqtt_port"], 60)
+        client_topic = config["mqtt_topic"]
 
 if __name__ == '__main__':    
+    innit()
     main()
     #test()
 
