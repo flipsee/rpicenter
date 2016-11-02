@@ -76,6 +76,11 @@ def get_device(device_object_id=None):
             return d
     return None
 
+def list_devices():
+    _result = {}
+    for d in _devices:
+        _result[d.device_object_id] = d.commands
+    return _result
 
 _plugins = glob.glob(os.path.join(os.path.dirname(__file__), "*.py"))
 __all__ = [os.path.splitext(os.path.basename(f))[0] for f in _plugins

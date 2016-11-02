@@ -1,4 +1,4 @@
-import os, glob
+#import os, glob
 
 # Build list of commands
 #_plugins = glob.glob(os.path.join(os.path.dirname(__file__), "*.py"))
@@ -8,7 +8,7 @@ import os, glob
 # Load all commands
 #from rpicenter import *
 
-from os.path import dirname, basename, isfile
-import glob
-modules = glob.glob(dirname(__file__)+"/*.py")
-__all__ = [ basename(f)[:-3] for f in modules if isfile(f)]
+#from os.path import dirname, basename, isfile
+#import glob
+#modules = glob.glob(dirname(__file__)+"/*.py")
+#__all__ = [ basename(f)[:-3] for f in modules if isfile(f)]

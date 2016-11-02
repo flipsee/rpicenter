@@ -1,3 +1,4 @@
+import paho.mqtt.client as mqtt
 import RPi.GPIO as GPIO
 import time
 
@@ -7,15 +8,14 @@ except SystemError:
     from rpicenterModel import *
 
 import devices
+from devices import *
+#from devices.dht import DHT
+#from devices.led import Led
+#from devices.display import Display
 
-from devices.dht import DHT
-from devices.led import Led
-from devices.display import Display
-
-#1. import all Devices.
-#2. load all devices from db.
-#3. load recipies.
-#.wait input.
+#1. load all devices from db.
+#2. load recipies.
+#3. wait input.
 
 def insert_sample():
     db = rpicenterBL()
@@ -28,7 +28,6 @@ def insert_sample():
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
     finally:
         db.close()
-   
 
 def load_devices():
     db = rpicenterBL()
@@ -47,7 +46,65 @@ def load_devices():
     finally:
         db.close()
 
+def send_message(topic, message):
+    client.publish(topic, message)
+
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    client.subscribe("rpicenter/#")
+
+def on_message(client, userdata, msg):
+    print(msg.topic+" "+str(msg.payload))
+    _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
+    run_command(_msg)
+
+def run_command(msg):
+    print(msg)
+    result = ""
+    try:
+        _device = str(msg).split('.')
+        _method = _device[1].split('(')
+
+        device = devices.get_device(str(_device[0]))
+        if device is not None:        
+            try:            
+                temp = 'getattr(device, str(_method[0]))(' + _method[1]
+                print(str(temp))
+                result = eval('getattr(device, str(_method[0]))(' + _method[1])
+            except:
+                result = "Error calling: " + str(msg)
+        else: result = "Unable to find Device: " + _device[0]
+    except:
+        result = "Invalid Message"
+    finally:
+        print(result)
+    return result
+
 def main():
+    try:
+        devices.gpio_setmode(GPIO.BCM) #change this to board.
+        load_devices()
+
+        if client is not None:
+            client.loop_forever()
+        else:
+            while True:
+                usercmd = input("Enter command\n")
+                run_command(usercmd)
+    except KeyboardInterrupt:
+        print("Shutdown requested...exiting") 
+    finally:
+        exit_handler()
+
+def exit_handler():    
+    print("App terminated, cleanup!")
+    devices.cleanup()
+    if client is not None: client.disconnect()
+
+def list_devices():
+    return devices.list_devices()
+
+def test():
     try:        
         devices.gpio_setmode(GPIO.BCM) #change this to board.
 
@@ -59,17 +116,17 @@ def main():
         #blueLed =  dev.register_device(device_object_id="Blue-Led", slot="3", location="Living Room", gpio_pin=13, type="Led")
         #disp =  dev.register_device(device_object_id="Display", slot="4", location="Living Room", gpio_pin=24, type="Display")
 
-        print("Registered Devices: " + str(devices._devices))
+        print("List Devices: ")
+        for key, value in devices.list_devices().items():
+            print(key + ": " + str(value))
 
         redLed = devices.get_device("RedLed")
-        print("Command in RedLed are: " + str(redLed.commands))
         redLed.on()
         time.sleep(2)
         redLed.off()        
         time.sleep(2)
 
         dhtSensor = devices.get_device("TempSensor")
-        print("Command in dht are: " + str(dhtSensor.commands))
         print("Temperature@" + str(dhtSensor.location) + " is: " + str(dhtSensor.temperature()))
 
         disp = devices.get_device("Display")
@@ -80,9 +137,13 @@ def main():
     finally:
         exit_handler()
 
-def exit_handler():    
-    print("App terminated, cleanup!")
-    devices.cleanup()
+client = None #mqtt.Client()
+if client is not None:
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect("localhost", 1999, 60)
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     main()
+    #test()
+

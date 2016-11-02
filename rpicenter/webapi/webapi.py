@@ -1,3 +1,4 @@
+from .rpicenter import rpicenter
 from flask import Flask, request, jsonify
 app = Flask(__name__)
 
@@ -9,8 +10,13 @@ def post_msg(uuid):
     return uuid
 
 @app.route("/")
-def hello():
-    return "Hi, this is rpicenter Web API landing page, available method:"
+def main():
+    _result = "<ul>"
+    for key, value in rpicenter.list_devices().items():
+        _result = "<li>" + key + ": " + str(value) + "</li>"
+    _result = _result + "</ul>"
+    print(_result)
+    return _result
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=9003, debug=True)
