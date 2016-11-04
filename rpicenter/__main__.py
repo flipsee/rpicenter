@@ -15,6 +15,10 @@ from devices import *
 #2. load recipies.
 #3. wait input.
 
+mqtt_client = None
+mqtt_client_topic = None
+curr_class = None
+
 def insert_sample():
     db = rpicenterBL()
     try:
@@ -47,11 +51,13 @@ def load_devices():
         db.close()
 
 def send_message(topic, message):
-    client.publish(topic, message)
+    global mqtt_client
+    mqtt_client.publish(topic, message)
 
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
-    client.subscribe(client_topic)
+    global mqtt_client_topic
+    client.subscribe(mqtt_client_topic)
 
 def on_message(client, userdata, msg):
     print(msg.topic+" "+str(msg.payload))
@@ -67,10 +73,13 @@ def run_command(msg):
 
         device = devices.get_device(str(_device[0]))
         if device is not None:        
-            try:            
-                temp = 'getattr(device, str(_method[0]))(' + _method[1]
-                print(str(temp))
-                result = eval('getattr(device, str(_method[0]))(' + _method[1])
+            try:     
+                if _method.count() == 1:
+                    result = eval('getattr(device, str(_method[0]))()')
+                else:
+                    temp = 'getattr(device, str(_method[0]))(' + _method[1]
+                    print(str(temp))
+                    result = eval('getattr(device, str(_method[0]))(' + _method[1])
             except:
                 result = "Error calling: " + str(msg)
         else: result = "Unable to find Device: " + _device[0]
@@ -81,11 +90,11 @@ def run_command(msg):
     return result
 
 def main():
+    global mqtt_client
     try:
         load_devices()
-
-        if client is not None:
-            client.loop_forever()
+        if mqtt_client is not None:
+            mqtt_client.loop_forever()
         else:
             while True:
                 usercmd = input("Enter command\n")
@@ -93,12 +102,12 @@ def main():
     except KeyboardInterrupt:
         print("Shutdown requested...exiting") 
     finally:
-        exit_handler()
+        exit_handler(mqtt_client)
 
-def exit_handler():    
+def exit_handler(mqtt_client):    
     print("App terminated, cleanup!")
     devices.cleanup()
-    if client is not None: client.disconnect()
+    if mqtt_client is not None: mqtt_client.disconnect()
 
 def list_devices():
     return devices.list_devices()
@@ -134,12 +143,6 @@ def test():
     finally:
         exit_handler()
 
-client = None #mqtt.Client()
-client_topic = None
-if client is not None:
-    client.on_connect = on_connect
-    client.on_message = on_message
-
 def innit():
     cfg = configparser.ConfigParser()
     configname = 'rpicenter.conf'
@@ -151,9 +154,16 @@ def innit():
     config = cfg["DEFAULT"]
 
     devices.gpio_setmode(eval("GPIO." + str(config["gpio_type"])))
-    if client is not None:
-        client.connect(config["mqtt_server"], config["mqtt_port"], 60)
-        client_topic = config["mqtt_topic"]
+
+    global mqtt_client
+    global mqtt_client_topic
+
+    if config["mqtt_server"] is not None:
+        mqtt_client = None #mqtt.Client()
+        #mqtt_client.on_connect = on_connect
+        #mqtt_client.on_message = on_message
+        #mqtt_client_topic = config["mqtt_topic"]
+        #mqtt_client.connect(str(config["mqtt_server"]), int(config["mqtt_port"]), 60)
 
 if __name__ == '__main__':    
     innit()
