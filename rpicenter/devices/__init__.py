@@ -12,6 +12,10 @@ class Device:
         self.location = location
         self.is_local = is_local
         self.commands = [method for method in dir(self) if callable(getattr(self, method)) and not method.startswith("__")]
+        self.hooks = {}
+
+    def add_hook(self, key, func):
+        self.hooks.update({key: func})
 
     def cleanup(self):
         pass
@@ -33,9 +37,11 @@ _devices = [] #type:Device[]
 def command(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        print("Running: " + func.__name__)
+        _result = None
+        print("Running: " + self.device_object_id + "." +  func.__name__)
         #return asyncio.coroutine(func(self, *args, **kwargs))
-        return func(self,*args, **kwargs)
+        _result = func(self,*args, **kwargs)
+        return _result
     return wrapper
 
 def cleanup():

@@ -1,15 +1,15 @@
 import configparser
 import paho.mqtt.client as mqtt
 import RPi.GPIO as GPIO
-import time
+import threading, time
+import devices
+from devices import *
 
 try:
     from .rpicenterModel import *
 except SystemError:
     from rpicenterModel import *
 
-import devices
-from devices import *
 
 #1. load all devices from db.
 #2. load recipies.
@@ -17,7 +17,6 @@ from devices import *
 
 mqtt_client = None
 mqtt_client_topic = None
-curr_class = None
 
 def insert_sample():
     db = rpicenterBL()
@@ -28,10 +27,15 @@ def insert_sample():
             db.add_Device(DeviceObjectID="GreenLed", Slot="2", Location="Living Room", GPIOPin=19, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="BlueLed", Slot="3", Location="Living Room", GPIOPin=13, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
-
             #db.add_Device(DeviceObjectID="Button1", Slot="5", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
     finally:
         db.close()
+
+def load_hooks():
+    print("Adding Hooks")        
+    RedLed = devices.get_device("RedLed")
+    RedLed.add_hook("POST_on", "run_command('GreenLed.off')")
+    RedLed.add_hook("POST_off", "run_command('GreenLed.on')")
 
 def load_devices():
     db = rpicenterBL()
@@ -55,8 +59,8 @@ def send_message(topic, message):
     mqtt_client.publish(topic, message)
 
 def on_connect(client, userdata, flags, rc):
-    print("Connected with result code "+str(rc))
     global mqtt_client_topic
+    print("Connected to MQTT, Subscribe to: " + str(mqtt_client_topic))
     client.subscribe(mqtt_client_topic)
 
 def on_message(client, userdata, msg):
@@ -65,7 +69,7 @@ def on_message(client, userdata, msg):
     run_command(_msg)
 
 def run_command(msg):
-    print(msg)
+    #print("run_command: " + msg)
     result = ""
     try:
         _device = str(msg).split('.')
@@ -73,36 +77,56 @@ def run_command(msg):
 
         device = devices.get_device(str(_device[0]))
         if device is not None:        
+            _method_name = str(_method[0])
             try:     
-                if _method.count() == 1:
-                    result = eval('getattr(device, str(_method[0]))()')
+                __run_hooks__(device.hooks, "PRE_" + _method_name)
+
+                if len(_method) == 1:
+                    result = eval('getattr(device, _method_name)()')
                 else:
-                    temp = 'getattr(device, str(_method[0]))(' + _method[1]
-                    print(str(temp))
-                    result = eval('getattr(device, str(_method[0]))(' + _method[1])
-            except:
+                    #print(str('getattr(device, _method_name)(' + _method[1]))
+                    result = eval('getattr(device, _method_name)(' + _method[1])
+                
+                __run_hooks__(device.hooks, "POST_" + _method_name)
+            except Exception as ex:
+                print(str(ex))
                 result = "Error calling: " + str(msg)
+                
         else: result = "Unable to find Device: " + _device[0]
     except:
         result = "Invalid Message"
     finally:
-        print(result)
+        print(str(result))
     return result
+
+def __run_hooks__(hooks, key, *args, **kwargs):
+    if (hooks != None):
+        for h_key, h_value in hooks.items():
+            if h_key == key: eval(h_value)
 
 def main():
     global mqtt_client
     try:
         load_devices()
+        load_hooks()
+
+        ### Input Channels ###
+        console = threading.Thread(target=console_input)
+        console.daemon = True
+        console.start()
+
         if mqtt_client is not None:
             mqtt_client.loop_forever()
-        else:
-            while True:
-                usercmd = input("Enter command\n")
-                run_command(usercmd)
+        ### Input Channels-End ###
     except KeyboardInterrupt:
         print("Shutdown requested...exiting") 
     finally:
         exit_handler(mqtt_client)
+
+def console_input():
+    while True:
+        usercmd = input("Enter command\n")
+        run_command(usercmd)
 
 def exit_handler(mqtt_client):    
     print("App terminated, cleanup!")
@@ -111,6 +135,32 @@ def exit_handler(mqtt_client):
 
 def list_devices():
     return devices.list_devices()
+
+def innit():
+    cfg = configparser.ConfigParser()
+    configname = 'rpicenter.conf'
+    if os.path.exists(configname): #check the config file in the caller path
+        cfg.read(configname)
+    else: #if not found check the config in the source path
+        cfg.read(os.path.join(os.path.abspath(os.path.dirname(__file__)),configname))
+
+    config = cfg["DEFAULT"]
+
+    devices.gpio_setmode(eval("GPIO." + str(config["gpio_type"])))
+
+    global mqtt_client
+    global mqtt_client_topic
+
+    if config["mqtt_server"] is not None:
+        mqtt_client = mqtt.Client()
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_message = on_message
+        mqtt_client_topic = config["mqtt_topic"]
+        mqtt_client.connect(str(config["mqtt_server"]), int(config["mqtt_port"]), 60)
+
+if __name__ == '__main__':    
+    innit()
+    main()
 
 def test():
     try:        
@@ -142,31 +192,4 @@ def test():
         print("Shutdown requested...exiting")
     finally:
         exit_handler()
-
-def innit():
-    cfg = configparser.ConfigParser()
-    configname = 'rpicenter.conf'
-    if os.path.exists(configname): #check the config file in the caller path
-        cfg.read(configname)
-    else: #if not found check the config in the source path
-        cfg.read(os.path.join(os.path.abspath(os.path.dirname(__file__)),configname))
-
-    config = cfg["DEFAULT"]
-
-    devices.gpio_setmode(eval("GPIO." + str(config["gpio_type"])))
-
-    global mqtt_client
-    global mqtt_client_topic
-
-    if config["mqtt_server"] is not None:
-        mqtt_client = None #mqtt.Client()
-        #mqtt_client.on_connect = on_connect
-        #mqtt_client.on_message = on_message
-        #mqtt_client_topic = config["mqtt_topic"]
-        #mqtt_client.connect(str(config["mqtt_server"]), int(config["mqtt_port"]), 60)
-
-if __name__ == '__main__':    
-    innit()
-    main()
-    #test()
 
