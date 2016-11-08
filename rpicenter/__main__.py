@@ -27,7 +27,7 @@ def insert_sample():
             db.add_Device(DeviceObjectID="GreenLed", Slot="2", Location="Living Room", GPIOPin=19, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="BlueLed", Slot="3", Location="Living Room", GPIOPin=13, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
-            #db.add_Device(DeviceObjectID="Button1", Slot="5", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
+            db.add_Device(DeviceObjectID="Btn", Slot="5", Location="Living Room", GPIOPin=12, Type="Switch", IsLocal=True)
     finally:
         db.close()
 
@@ -36,6 +36,9 @@ def load_hooks():
     RedLed = devices.get_device("RedLed")
     RedLed.add_hook("POST_on", "run_command('GreenLed.off')")
     RedLed.add_hook("POST_off", "run_command('GreenLed.on')")
+
+    Btn = devices.get_device("Btn")
+    Btn.add_callback(lambda: run_command('RedLed.toggle'))
 
 def load_devices():
     db = rpicenterBL()

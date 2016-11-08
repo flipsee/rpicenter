@@ -17,7 +17,7 @@ class DHT(Device):
         #self._humidity = 999
         self._last_reading = datetime.min
         self._read_interval = self.min_read_interval
-        self.__run_sensor__()
+        #self.__run_sensor__()
 
     @command
     def temperature(self):

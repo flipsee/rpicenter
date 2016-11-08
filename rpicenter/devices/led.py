@@ -37,6 +37,15 @@ class Led(Device):
         return self    
     
     @command
+    def toggle(self):            
+        if self.state:
+            self.off()
+        else:
+            self.on()
+        #self.__change_state__((not self.state))
+        return self
+        
+    @command
     def blink(self, repetition, interval):
         print("Device " + self.device_object_id + " Loop starting...")
         self.thread = threading.Thread(target=self.__blink__, kwargs=kwargs)
@@ -44,10 +53,10 @@ class Led(Device):
             self.thread.start()
         return self
 
-    def __blink__(self, repetition, interval): 
+    def __blink__(self, repetition, interval):
+        self.toggle() 
         counter = 0
         while counter < repetition:
-            self__change_state__((not self.state))
             counter += 1
             time.sleep(interval)
         return self
