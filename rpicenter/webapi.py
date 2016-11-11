@@ -1,5 +1,6 @@
 from .rpicenter import rpicenter
 from flask import Flask, request, jsonify
+
 app = Flask(__name__)
 
 @app.route("/api/post_msg/<path:uuid>",methods=['GET','POST'])

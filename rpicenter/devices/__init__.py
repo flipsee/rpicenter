@@ -1,6 +1,6 @@
 import RPi.GPIO as GPIO
 from functools import wraps
-import sys, os, glob, asyncio
+import sys, os, glob
 import importlib
 
 class Device:
@@ -20,15 +20,6 @@ class Device:
     def cleanup(self):
         pass
 
-    #def command(func):
-    #    print("decorating: " + func.__name__)
-    #    Device.commands.append(func.__name__)
-    #    @wraps(func)
-    #    def wrapper(*args, **kwargs):
-    #        print("Running: " + func.__name__)
-    #        #return asyncio.coroutine(func(*args, **kwargs))
-    #        return func(*args, **kwargs)
-    #    return wrapper
 
 GPIO = GPIO
 _devices = [] #type:Device[]

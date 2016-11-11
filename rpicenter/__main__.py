@@ -1,8 +1,6 @@
-import configparser
-import paho.mqtt.client as mqtt
 import RPi.GPIO as GPIO
 import threading, time
-import devices
+import config, ir, mqtt, devices
 from devices import *
 
 try:
@@ -10,13 +8,9 @@ try:
 except SystemError:
     from rpicenterModel import *
 
-
 #1. load all devices from db.
 #2. load recipies.
 #3. wait input.
-
-mqtt_client = None
-mqtt_client_topic = None
 
 def insert_sample():
     db = rpicenterBL()
@@ -57,20 +51,6 @@ def load_devices():
     finally:
         db.close()
 
-def send_message(topic, message):
-    global mqtt_client
-    mqtt_client.publish(topic, message)
-
-def on_connect(client, userdata, flags, rc):
-    global mqtt_client_topic
-    print("Connected to MQTT, Subscribe to: " + str(mqtt_client_topic))
-    client.subscribe(mqtt_client_topic)
-
-def on_message(client, userdata, msg):
-    print(msg.topic+" "+str(msg.payload))
-    _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
-    run_command(_msg)
-
 def run_command(msg):
     #print("run_command: " + msg)
     result = ""
@@ -107,28 +87,46 @@ def __run_hooks__(hooks, key, *args, **kwargs):
         for h_key, h_value in hooks.items():
             if h_key == key: eval(h_value)
 
+def init():
+    cfg = config.get_config()
+    devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
+
 def main():
-    global mqtt_client
     try:
+        init()
+
         load_devices()
         load_hooks()
 
         ### Input Channels ###
-        console = threading.Thread(target=console_input)
+        mqtt.add_callback(run_command)
+        if mqtt.client is not None:
+            #mqtt.client.loop_forever()
+            console = threading.Thread(target=mqtt.client.loop_forever)
+            console.daemon = True
+            console.start()
+
+        ir.add_callback(run_command)
+        console = threading.Thread(target=ir.input_ir)
         console.daemon = True
         console.start()
 
-        if mqtt_client is not None:
-            mqtt_client.loop_forever()
+        #console = threading.Thread(target=console_input)
+        #console.daemon = True
+        #console.start()
+        
+        console_input()
         ### Input Channels-End ###
+
     except KeyboardInterrupt:
         print("Shutdown requested...exiting") 
     finally:
-        exit_handler(mqtt_client)
+        exit_handler(mqtt.client)
 
 def console_input():
+    print("Starting Console Input...")
     while True:
-        usercmd = input("Enter command\n")
+        usercmd = input("Enter command:\n")
         run_command(usercmd)
 
 def exit_handler(mqtt_client):    
@@ -139,60 +137,7 @@ def exit_handler(mqtt_client):
 def list_devices():
     return devices.list_devices()
 
-def innit():
-    cfg = configparser.ConfigParser()
-    configname = 'rpicenter.conf'
-    if os.path.exists(configname): #check the config file in the caller path
-        cfg.read(configname)
-    else: #if not found check the config in the source path
-        cfg.read(os.path.join(os.path.abspath(os.path.dirname(__file__)),configname))
-
-    config = cfg["DEFAULT"]
-
-    devices.gpio_setmode(eval("GPIO." + str(config["gpio_type"])))
-
-    global mqtt_client
-    global mqtt_client_topic
-
-    if config["mqtt_server"] is not None:
-        mqtt_client = mqtt.Client()
-        mqtt_client.on_connect = on_connect
-        mqtt_client.on_message = on_message
-        mqtt_client_topic = config["mqtt_topic"]
-        mqtt_client.connect(str(config["mqtt_server"]), int(config["mqtt_port"]), 60)
 
 if __name__ == '__main__':    
-    innit()
     main()
-
-def test():
-    try:        
-        load_devices()    
-        #dhtSensor = dev.register_device(device_object_id="DHT1", slot="0", location="Living Room", gpio_pin=5, type="DHT")
-        #redLed = Led(device_object_id="Red-Led", slot="1", location="Living Room", gpio_pin=26)
-        #dev.register_device(device=redLed)
-        #greenLed = dev.register_device(device_object_id="Green-Led", slot="2", location="Living Room", gpio_pin=19, type ="Led")
-        #blueLed =  dev.register_device(device_object_id="Blue-Led", slot="3", location="Living Room", gpio_pin=13, type="Led")
-        #disp =  dev.register_device(device_object_id="Display", slot="4", location="Living Room", gpio_pin=24, type="Display")
-
-        print("List Devices: ")
-        for key, value in devices.list_devices().items():
-            print(key + ": " + str(value))
-
-        redLed = devices.get_device("RedLed")
-        redLed.on()
-        time.sleep(2)
-        redLed.off()        
-        time.sleep(2)
-
-        dhtSensor = devices.get_device("TempSensor")
-        print("Temperature@" + str(dhtSensor.location) + " is: " + str(dhtSensor.temperature()))
-
-        disp = devices.get_device("Display")
-        disp.show_message("happycat_oled_64.ppm")
-        time.sleep(5)
-    except KeyboardInterrupt:
-        print("Shutdown requested...exiting")
-    finally:
-        exit_handler()
 
