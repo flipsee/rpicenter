@@ -1,6 +1,7 @@
 import RPi.GPIO as GPIO
 import threading, time
-import config, ir, mqtt, devices
+import config, ir, devices 
+from mqtt import mqtt
 from devices import *
 
 try:
@@ -92,6 +93,7 @@ def init():
     devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
 
 def main():
+    mq = mqtt(callback=run_command)
     try:
         init()
 
@@ -99,29 +101,27 @@ def main():
         load_hooks()
 
         ### Input Channels ###
-        mqtt.add_callback(run_command)
-        if mqtt.client is not None:
-            #mqtt.client.loop_forever()
-            console = threading.Thread(target=mqtt.client.loop_forever)
-            console.daemon = True
-            console.start()
-
         ir.add_callback(run_command)
-        console = threading.Thread(target=ir.input_ir)
-        console.daemon = True
-        console.start()
+        input_ir = threading.Thread(target=ir.input_ir)
+        input_ir.daemon = True
+        input_ir.start()
 
-        #console = threading.Thread(target=console_input)
-        #console.daemon = True
-        #console.start()
-        
+        #mq.send_message("rpicenter\Reply" , "Command Run sucess")
+        if mq.client is not None: 
+            #mq.client.loop_forever()
+            input_mqtt = threading.Thread(target=mq.client.loop_forever)
+            input_mqtt.daemon = True
+            input_mqtt.start()
+
+        #input_console = threading.Thread(target=console_input)
+        #input_console.daemon = True
+        #input_console.start()
         console_input()
         ### Input Channels-End ###
-
     except KeyboardInterrupt:
         print("Shutdown requested...exiting") 
     finally:
-        exit_handler(mqtt.client)
+        exit_handler(mq.client)
 
 def console_input():
     print("Starting Console Input...")

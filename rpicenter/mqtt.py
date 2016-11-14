@@ -1,49 +1,40 @@
-import paho.mqtt.client as mq
 import config
+import paho.mqtt.client as mq
 
-client = None
-client_topic = None
-__callback__ = []
-
-def main(server=None, port=None, topic=None):
-    global client
-    global client_topic
-
-    client = mq.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-    if server == None:
+class mqtt():
+    def __init__(self,server=None, port=None, topic=None, callback=None):
+        self.client = mq.Client()
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+        self.topic = None
+        self.__callback__ = []
         cfg = config.get_config()
-
         if cfg["mqtt_server"] is not None:
-            client_topic = cfg["mqtt_topic"]
+            self.topic = cfg["mqtt_topic"]
             server = str(cfg["mqtt_server"]) 
             port = int(cfg["mqtt_port"])
-    else:
-        client_topic = topic
+        else:
+            self.topic = topic
 
-    client.connect(server, int(port), 60)
+        if callback != None: self.__callback__.append(callback)
 
-def on_connect(client, userdata, flags, rc):
-    global client_topic
-    print("Starting MQTT input...")
-    client.subscribe(client_topic)
+        self.client.connect(server, int(port), 60)
 
-def on_message(client, userdata, msg):
-    #global __callback__
-    print(msg.topic+" "+str(msg.payload))
-    _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
+    def on_connect(self, client, userdata, flags, rc):
+        print("Connected with result code "+str(rc))
+        self.client.subscribe(self.topic)
 
-    if (__callback__ != None):
-        for cb in __callback__:
-            if cb != None: cb(_msg)
+    def on_message(self, client, userdata, msg):
+        print(msg.topic+" "+str(msg.payload))
+        _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
 
-def add_callback(callback):
-    #global __callback__
-    __callback__.append(callback)
+        if (self.__callback__ != None):
+            for cb in self.__callback__:
+                if cb != None: cb(_msg)
 
-def send_message(topic, message):
-    global client
-    client.publish(topic, message)
+    def add_callback(self, callback):
+        self.__callback__.append(callback)
 
-main()
+    def send_message(self, topic, message):
+        self.client.publish(topic, message)
+
