@@ -1,7 +1,7 @@
 import RPi.GPIO as GPIO
 import threading, time
-import config, ir, devices 
-from mqtt import mqtt
+import config, devices 
+from input import mqtt, console, ir
 from devices import *
 
 try:
@@ -27,7 +27,7 @@ def insert_sample():
         db.close()
 
 def load_hooks():
-    print("Adding Hooks")        
+    print("=== Adding Hooks ===")        
     RedLed = devices.get_device("RedLed")
     RedLed.add_hook("POST_on", "run_command('GreenLed.off')")
     RedLed.add_hook("POST_off", "run_command('GreenLed.on')")
@@ -48,11 +48,10 @@ def load_devices():
         for entry in data:
             print("Device:" + entry.DeviceObjectID)
             devices.register_device(device_object_id=entry.DeviceObjectID, slot=entry.Slot, gpio_pin=entry.GPIOPin, location=entry.Location, is_local=entry.IsLocal, type=entry.Type)
-        print("=== Loading Devices-End ===")
     finally:
         db.close()
 
-def run_command(msg):
+def run_command(msg, input=None, requestID=None):
     #print("run_command: " + msg)
     result = ""
     try:
@@ -88,54 +87,46 @@ def __run_hooks__(hooks, key, *args, **kwargs):
         for h_key, h_value in hooks.items():
             if h_key == key: eval(h_value)
 
-def init():
-    cfg = config.get_config()
-    devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
-
 def main():
-    mq = mqtt(callback=run_command)
+    input_channel = []
+    input_channel.append(mqtt(callback=run_command))
+    input_channel.append(console(callback=run_command))
+    input_channel.append(ir(callback=run_command))
+    
     try:
-        init()
+        cfg = config.get_config()
+        devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
 
         load_devices()
         load_hooks()
 
         ### Input Channels ###
-        ir.add_callback(run_command)
-        input_ir = threading.Thread(target=ir.input_ir)
-        input_ir.daemon = True
-        input_ir.start()
+        for input in input_channel:
+            i = threading.Thread(target=input.run)
+            i.daemon = True
+            i.start()
 
         #mq.send_message("rpicenter\Reply" , "Command Run sucess")
-        if mq.client is not None: 
-            #mq.client.loop_forever()
-            input_mqtt = threading.Thread(target=mq.client.loop_forever)
-            input_mqtt.daemon = True
-            input_mqtt.start()
 
-        #input_console = threading.Thread(target=console_input)
-        #input_console.daemon = True
-        #input_console.start()
-        console_input()
-        ### Input Channels-End ###
+        # the below is to suspend the thread so it will not quit
+        while True:
+            pass
     except KeyboardInterrupt:
         print("Shutdown requested...exiting") 
     finally:
-        exit_handler(mq.client)
+        for input in input_channel:
+            input.cleanup()
+        exit_handler()
 
-def console_input():
-    print("Starting Console Input...")
-    while True:
-        usercmd = input("Enter command:\n")
-        run_command(usercmd)
-
-def exit_handler(mqtt_client):    
+def exit_handler():    
     print("App terminated, cleanup!")
     devices.cleanup()
-    if mqtt_client is not None: mqtt_client.disconnect()
 
 def list_devices():
     return devices.list_devices()
+
+
+
 
 
 if __name__ == '__main__':    
