@@ -23,18 +23,11 @@ class Led(Device):
 
     @command
     def on(self): 
-        #print("on")
         self.__change_state__(True)
-        return self
     
     @command
     def off(self):
-        #print("off")
-        #self.state = False
-        #self.laststatechange = datetime.now()
-        #GPIO.output(self.gpio_pin, self.state)
         self.__change_state__(False)
-        return self    
     
     @command
     def toggle(self):            
@@ -42,8 +35,6 @@ class Led(Device):
             self.off()
         else:
             self.on()
-        #self.__change_state__((not self.state))
-        return self
         
     @command
     def blink(self, repetition, interval):
@@ -51,7 +42,6 @@ class Led(Device):
         self.thread = threading.Thread(target=self.__blink__, kwargs=kwargs)
         if self.thread.isAlive() == False:
             self.thread.start()
-        return self
 
     def __blink__(self, repetition, interval):
         self.toggle() 

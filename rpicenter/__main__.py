@@ -1,7 +1,7 @@
 import RPi.GPIO as GPIO
 import threading, time
-import config, devices 
 from input import mqtt, console, ir
+import config, devices 
 from devices import *
 
 try:
@@ -71,6 +71,9 @@ def run_command(msg, input=None, requestID=None):
                     result = eval('getattr(device, _method_name)(' + _method[1])
                 
                 __run_hooks__(device.hooks, "POST_" + _method_name)
+
+                #print(str(device.device_object_id + " " + _method_name) + " result: " + str(result))
+                if input != None: input.reply(requestID=requestID, msg=result)
             except Exception as ex:
                 print(str(ex))
                 result = "Error calling: " + str(msg)
@@ -79,7 +82,8 @@ def run_command(msg, input=None, requestID=None):
     except:
         result = "Invalid Message"
     finally:
-        print(str(result))
+        pass
+        #print(str(result))
     return result
 
 def __run_hooks__(hooks, key, *args, **kwargs):
@@ -99,6 +103,7 @@ def main():
 
         load_devices()
         load_hooks()
+        #load_recipies()
 
         ### Input Channels ###
         for input in input_channel:
@@ -106,27 +111,20 @@ def main():
             i.daemon = True
             i.start()
 
-        #mq.send_message("rpicenter\Reply" , "Command Run sucess")
-
         # the below is to suspend the thread so it will not quit
         while True:
             pass
     except KeyboardInterrupt:
-        print("Shutdown requested...exiting") 
+        print("Shutdown requested! exiting...") 
     finally:
+        print("App terminated, cleanup...")
         for input in input_channel:
             input.cleanup()
-        exit_handler()
-
-def exit_handler():    
-    print("App terminated, cleanup!")
-    devices.cleanup()
+        
+        devices.cleanup()
 
 def list_devices():
     return devices.list_devices()
-
-
-
 
 
 if __name__ == '__main__':    

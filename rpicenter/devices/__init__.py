@@ -31,7 +31,14 @@ def command(func):
         _result = None
         print("Running: " + self.device_object_id + "." +  func.__name__)
         #return asyncio.coroutine(func(self, *args, **kwargs))
-        _result = func(self,*args, **kwargs)
+        try:
+            _result = func(self,*args, **kwargs)
+        except exception as ex:
+            _result = str(ex)
+        finally:
+            if _result == None:
+                _result = self.device_object_id + "." +  func.__name__ + ": " + "ACK"
+        #print(str(_result))
         return _result
     return wrapper
 

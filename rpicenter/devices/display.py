@@ -44,27 +44,24 @@ class Display(Device):
         #print("Clearing Display")
         self.disp.clear()
         self.disp.display()    
-        return self    
 
     @command
     def show_message(self, msg, x=1, y=1):
         #print("Showing Msg")
         self.draw.text((x, y), str(msg),  font=self.font, fill=255)
         self.__display__()
-        return self
 
     @command
     def show_image(self, imgName):
         #print("Showing Image")
         self.image = Image.open(imgName).resize((self.disp.width, self.disp.height), Image.ANTIALIAS).convert('1')
         self.__display__()
-        return self
     
     def cleanup(self):
-        self.clear()
+        self.disp.clear()
+        self.disp.display()    
 
     def __display__(self):
         self.disp.image(self.image)
         self.disp.display()
-        return self
 

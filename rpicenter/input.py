@@ -17,8 +17,10 @@ class IInput:
     def cleanup(self):
         self.__flagstop__ = True
 
-    @abstractmethod
-    def reply(self, requestID, msg): raise NotImplementedError
+    def reply(self, msg, requestID=None):
+        _result = "Reply Msg: " + str(msg)
+        if requestID != None: _result = "Reply RequestID: " + str(requestID) + " Msg: " + str(msg)
+        print(_result)
     
     @abstractmethod
     def run(self): raise NotImplementedError
@@ -65,9 +67,10 @@ class mqtt(IInput):
     def publish_msg(self, topic, msg):
         self.client.publish(topic, msg)
 
-    def reply(requestID, msg):
+    def reply(self, requestID, msg):
         topic = str(self.publish_topic) + str(requestID)
-        self.publish_msg(topic, msg)
+        print("MQTT Input Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
+        self.publish_msg(topic, str(msg))
 
     def run(self):
         print("Starting MQTT Input...")
@@ -79,9 +82,6 @@ class mqtt(IInput):
 class console(IInput):
     def __init__(self, callback=None):
         super(console, self).__init__(callback)
-
-    def reply(self, requestID, msg):
-        print("RequestID: " + str(requestID) + " Msg: " + msg)
 
     def run(self):
         self.__flagstop__ = False
@@ -114,9 +114,6 @@ class ir(IInput):
 
     def __init__(self, callback=None):
         super(ir, self).__init__(callback)
-
-    def reply(self, requestID, msg):
-        print("RequestID: " + str(requestID) + " Msg: " + msg)
 
     def run(self):
         self.__flagstop__ = False

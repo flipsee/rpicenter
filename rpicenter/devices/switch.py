@@ -1,39 +1,42 @@
 from . import Device, command, GPIO
 from datetime import datetime
-import inspect
 
 class Switch(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
+        self._state = False
+        self._last_state_changed = datetime.min
+        self.__callbacks = []
+
         super(Switch, self).__init__(device_object_id, slot, gpio_pin, location, is_local)
         GPIO.setup(self.gpio_pin, GPIO.IN, GPIO.PUD_UP)
         GPIO.add_event_detect(self.gpio_pin, GPIO.RISING, callback=self.__state_changed__, bouncetime=300)
-        self.__callbacks = []
+        self.__read_state__()
 
-    def get_state(self):
-        return self.state
+    @command
+    def state(self):
+        return self._state
 
-    def get_laststatechange(self):
-        return self.laststatechange
+    @command
+    def last_state_changed(self):
+        return self._last_state_changed
 
     @command
     def add_callback(self, callback):
-        #print(str(inspect.getsourcelines(callback)))
-        #callback()
         self.__callbacks.append(callback)
-        return self
         
-    def __state_changed__(self, channel):
+    def __read_state__(self):
         if GPIO.input(self.gpio_pin) == GPIO.HIGH:
-            self.state = True
+            self._state = True
         else:
-            self.state = False
+            self._state = False
 
+    def __state_changed__(self, channel):
+        self.__read_state__()
         print("Button State changed")
-        self.laststatechange = datetime.now()
+        self._last_state_changed = datetime.now()
         
         if (self.__callbacks is not None):
             for cb in self.__callbacks:
-                #print(str(inspect.getsourcelines(cb)))
                 try:
                     cb()
                 except Exception as ex:
