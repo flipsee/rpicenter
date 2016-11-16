@@ -23,6 +23,7 @@ def insert_sample():
             db.add_Device(DeviceObjectID="BlueLed", Slot="3", Location="Living Room", GPIOPin=13, Type="Led", IsLocal=True)
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
             db.add_Device(DeviceObjectID="Btn", Slot="5", Location="Living Room", GPIOPin=12, Type="Switch", IsLocal=True)
+            db.add_Device(DeviceObjectID="Buzzer", Slot="6", Location="Living Room", GPIOPin=21, Type="Buzzer", IsLocal=True)
     finally:
         db.close()
 
@@ -55,25 +56,30 @@ def run_command(msg, input=None, requestID=None):
     #print("run_command: " + msg)
     result = ""
     try:
-        _device = str(msg).split('.')
-        _method = _device[1].split('(')
+        cmd = str(msg)
+        _classidx = cmd.find(".")
+        _paramidx = cmd.find("(")
 
-        device = devices.get_device(str(_device[0]))
+        _device_name = str(cmd[:_classidx])
+        if _paramidx < 0: # means that it doesn't have any param 
+            _method_name = str(cmd[(_classidx + 1):])
+            _param = "()"
+        else:
+            _method_name = str(cmd[(_classidx + 1):_paramidx])
+            _param = str(cmd[_paramidx:len(cmd)])
+        
+        device = devices.get_device(str(_device_name))
         if device is not None:        
-            _method_name = str(_method[0])
             try:     
                 __run_hooks__(device.hooks, "PRE_" + _method_name)
-
-                if len(_method) == 1:
-                    result = eval('getattr(device, _method_name)()')
-                else:
-                    #print(str('getattr(device, _method_name)(' + _method[1]))
-                    result = eval('getattr(device, _method_name)(' + _method[1])
                 
+                result = eval('getattr(device, _method_name)' + _param)
+
                 __run_hooks__(device.hooks, "POST_" + _method_name)
 
-                #print(str(device.device_object_id + " " + _method_name) + " result: " + str(result))
+                #print("result: " + str(result))
                 if input != None: input.reply(requestID=requestID, msg=result)
+            
             except Exception as ex:
                 print(str(ex))
                 result = "Error calling: " + str(msg)
@@ -122,6 +128,7 @@ def main():
             input.cleanup()
         
         devices.cleanup()
+        time.sleep(1)
 
 def list_devices():
     return devices.list_devices()

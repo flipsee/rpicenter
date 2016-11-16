@@ -1,8 +1,6 @@
 from . import Device, command, GPIO
 from datetime import datetime
 import threading
-#from rpicenter import Device
-#import rpicenter
 
 class Led(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):

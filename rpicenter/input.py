@@ -53,7 +53,7 @@ class mqtt(IInput):
         self.client.subscribe(self.subscribe_topic)
 
     def __client_message__(self, client, userdata, msg):
-        print(msg.topic + " " + str(msg.payload))
+        print("MQTT Received Topic: " + msg.topic + " Msg: " + str(msg.payload))
         _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
         self.last_requestID = msg.topic.split('/')[self.publish_topic_cnt]
             
@@ -125,17 +125,18 @@ class ir(IInput):
                 if self.__flagstop__:
                     lirc.deinit() 
                     return
+
                 codeIR = lirc.nextcode()
                 try:
                     if codeIR:
                         action = codeIR[0]
                         print("IR Input Received: " + action)
-                        if (__callback__ != None):
-                            for cb in __callback__:
+                        if (self.__callback__ != None):
+                            for cb in self.__callback__:
                                 if cb != None:
                                     try:
                                         #find the command from the dict
-                                        command = __remote_command__.get(action,"Empty")
+                                        command = ir.__remote_command__.get(action,"Empty")
                                         print("IR Remote Command: " + str(command))
 
                                         if command != "Empty": cb(msg=command, input=self)
