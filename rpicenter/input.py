@@ -172,19 +172,37 @@ class webapi(IInput):
         print("Starting WebAPI Input...")
         self.app.run(host=self.webapi_address, port=self.webapi_port, debug=True, use_reloader=False)
     
-    #def cleanup(self):
-    #    func = request.environ.get('werkzeug.server.shutdown')
-    #    if func is not None: func()
+    def cleanup(self):
+        try:
+            func = request.environ.get('werkzeug.server.shutdown')
+            if func is not None: func()
+        except:
+            pass
 
     def routes(self):
         #we use single route to catch all
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
         def catch_all(path):
-            result = self.run_command(path)
-            return 'You enter: %s' % path + " Response: " + str(result)
+            command = self.__parse_input__(path)
+            result = "" #self.__run_command__(command)
+            return 'You enter: %s' % command + " Response: " + str(path)
 
-    def run_command(self, command):
+    def __parse_input__(self, path):
+        cmd = ""
+        'convention: http://rpi.center/{Command}/{Parameter1}/{Parameter2}...'
+        items = list(filter(None, path.split('/')))
+        for idx, item in enumerate(items):
+            cmd = cmd + item
+            if idx == 0 and len(items) > 1: 
+                cmd = cmd + "('"
+            elif len(items) > 1 and idx < len(items)-1:
+                cmd = cmd + "','"
+            elif len(items) > 1 and idx == len(items)-1:
+                cmd = cmd + "')"
+        return cmd
+
+    def __run_command__(self, command):
         try:
             if (self.__callback__ != None):
                 for cb in self.__callback__:
