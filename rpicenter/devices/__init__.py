@@ -6,24 +6,59 @@ import importlib
 class Device:
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
         #print("Device init:" + str(device_object_id))
+        self.__flagstop__ = False
+        self.hooks = {}
+        self.sub_devices = {}
+        self.sub_devices_list = {}
+
         self.device_object_id = device_object_id
         self.slot = slot
         self.gpio_pin = gpio_pin
         self.location = location
         self.is_local = is_local
         self.commands = [method for method in dir(self) if callable(getattr(self, method)) and not method.startswith("__")]
-        self.hooks = {}
 
     def add_hook(self, key, func):
         self.hooks.update({key: func})
 
+    def add_sub_device(self, device_object_id=None, slot=None, gpio_pin=None, location=None, type=None, is_local=True, device=None):
+        if device is not None:
+            device = self.__register_device__(device)
+        elif device_object_id is not None and slot is not None and location is not None and type is not None:
+            _class = getattr(sys.modules[__name__ + "." + type.lower()], type)
+            device = _class(device_object_id=device_object_id, slot=slot, location=location, gpio_pin=gpio_pin,is_local=is_local)
+            device = self.__register_device__(device)
+        return device
+
+    def __register_device__(self, device=None):
+        if isinstance(device, Device):
+            self.sub_devices.setdefault(device.device_object_id, device)
+            self.sub_devices_list.setdefault(device.device_object_id, device.commands)
+        return device
+
+    def is_device_exists(self, device_object_id):
+        result = False
+        if device_object_id is not None:  
+            if self.sub_devices.get(device_object_id, None) is not None:
+                result = True
+        return result
+
+    def get_sub_device(self, device_object_id=None):
+        if device_object_id is not None: return self.sub_devices.get(device_object_id, None)
+        return None
+
     def cleanup(self):
-        pass
+        self.__flagstop__ = True
+
+        for d in self.sub_devices:
+            d.cleanup()
+
+        self.sub_devices = []
 
 
 GPIO = GPIO
 _devices = [] #type:Device[]
-
+__devices = {}
 
 def command(func):
     @wraps(func)
@@ -61,6 +96,7 @@ def register_device(device_object_id=None, slot=None, gpio_pin=None, location=No
 
 def __register_device__(device=None):
     if isinstance(device, Device):
+        __devices.setdefault(device.device_object_id, device)
         if not is_device_exists(device):
             _devices.append(device)
     return device
@@ -70,9 +106,6 @@ def is_device_exists(device):
         if d.device_object_id == device.device_object_id:
             return True
     return False
-
-def gpio_setmode(gpio_mode):
-    GPIO.setmode(gpio_mode)
 
 def get_device(device_object_id=None):    
     for d in _devices:
@@ -85,6 +118,8 @@ def list_devices():
     for d in _devices:
         _result[d.device_object_id] = d.commands
     return _result
+
+
 
 _plugins = glob.glob(os.path.join(os.path.dirname(__file__), "*.py"))
 __all__ = [os.path.splitext(os.path.basename(f))[0] for f in _plugins

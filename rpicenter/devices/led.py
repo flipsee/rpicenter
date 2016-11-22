@@ -42,9 +42,11 @@ class Led(Device):
             self.thread.start()
 
     def __blink__(self, repetition, interval):
-        self.toggle() 
+        self.__flagstop__ = False
         counter = 0
         while counter < repetition:
+            if self.__flagstop__: return
             counter += 1
+            self.toggle() 
             time.sleep(interval)
-        return self
+        return 

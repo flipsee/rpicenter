@@ -1,6 +1,6 @@
 import RPi.GPIO as GPIO
 import threading, time
-from input import mqtt, console, ir
+from input import mqtt, console, ir, webapi
 import config, devices 
 from devices import *
 
@@ -49,6 +49,8 @@ def load_devices():
         for entry in data:
             print("Device:" + entry.DeviceObjectID)
             devices.register_device(device_object_id=entry.DeviceObjectID, slot=entry.Slot, gpio_pin=entry.GPIOPin, location=entry.Location, is_local=entry.IsLocal, type=entry.Type)
+    except:
+        print("Error loading Devices")
     finally:
         db.close()
 
@@ -85,12 +87,12 @@ def run_command(msg, input=None, requestID=None):
                 result = "Error calling: " + str(msg)
                 
         else: result = "Unable to find Device: " + _device[0]
-    except:
+    except Exception as ex:
+        print(str(ex))
         result = "Invalid Message"
     finally:
-        pass
+        return result
         #print(str(result))
-    return result
 
 def __run_hooks__(hooks, key, *args, **kwargs):
     if (hooks != None):
@@ -102,10 +104,12 @@ def main():
     input_channel.append(mqtt(callback=run_command))
     input_channel.append(console(callback=run_command))
     input_channel.append(ir(callback=run_command))
+    input_channel.append(webapi(callback=run_command))
     
     try:
         cfg = config.get_config()
-        devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
+        GPIO.setmode(eval("GPIO." + str(cfg["gpio_type"])))
+        #devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
 
         load_devices()
         load_hooks()
@@ -121,14 +125,15 @@ def main():
         while True:
             pass
     except KeyboardInterrupt:
-        print("Shutdown requested! exiting...") 
+        print("=== Shutdown requested! exiting ===") 
     finally:
         print("App terminated, cleanup...")
         for input in input_channel:
             input.cleanup()
         
         devices.cleanup()
-        time.sleep(1)
+        GPIO.cleanup()
+        time.sleep(0.5)
 
 def list_devices():
     return devices.list_devices()

@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 import config
 import paho.mqtt.client as mq
 import lirc
+from flask import Flask, request, jsonify
 
 class IInput:
     __metaclass__ = ABCMeta
@@ -44,8 +45,6 @@ class mqtt(IInput):
         else:
             self.subscribe_topic = subscribe_topic
             self.publish_topic = publish_topic
-        self.publish_topic_cnt = len(cfg["mqtt_publish"].split('/'))-1
-
         self.client.connect(server, int(port), 60)
 
     def __client_connect__(self, client, userdata, flags, rc):
@@ -55,12 +54,14 @@ class mqtt(IInput):
     def __client_message__(self, client, userdata, msg):
         print("MQTT Received Topic: " + msg.topic + " Msg: " + str(msg.payload))
         _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
-        self.last_requestID = msg.topic.split('/')[self.publish_topic_cnt]
-            
+        
+        requestID = msg.topic.replace(self.subscribe_topic.replace('+','').replace('#', ''),'')
+        self.last_requestID = requestID     
+
         if (self.__callback__ != None):
             for cb in self.__callback__:
                 try:
-                    if cb != None: cb(msg=_msg, input=self, requestID=self.last_requestID)
+                    if cb != None: cb(msg=_msg, input=self, requestID=requestID)
                 except Exception as ex:
                     print("MQTT Input Error: " + str(ex))
 
@@ -74,7 +75,10 @@ class mqtt(IInput):
 
     def run(self):
         print("Starting MQTT Input...")
-        self.client.loop_forever()
+        try:
+            self.client.loop_forever()
+        except Exception as ex:
+            print("MQTT Input Error: " + str(ex))
 
     def cleanup(self):
         if self.client is not None: self.client.disconnect()
@@ -89,14 +93,17 @@ class console(IInput):
 
         while True:
             if self.__flagstop__: return
-
-            _msg = input("Enter Console command:\n")
-            if (self.__callback__ != None):
-                for cb in self.__callback__:
-                    try:
-                        if cb != None: cb(msg=_msg, input=self)
-                    except Exception as ex:
-                        print("Console Input Error: " + str(ex))
+            
+            try:
+                _msg = input("Enter Console command:\n")
+                if (self.__callback__ != None):
+                    for cb in self.__callback__:
+                        try:
+                            if cb != None: cb(msg=_msg, input=self)
+                        except Exception as ex:
+                            print("Console Input Error: " + str(ex))
+            except Exception as ex:
+                print("Console Input Error: " + str(ex))            
 
 class ir(IInput):
     __remote_command__ = {'KEY_0': 'RedLed.on',
@@ -107,8 +114,8 @@ class ir(IInput):
             'KEY_5': 'BlueLed.off',
             'KEY_6': 'Display.show_message("Hello World")',
             'KEY_7': 'Display.clear',
-            'KEY_8': 'Display.show_message(TempSensor.temperature())',
-            'KEY_9': 'Display.show_message(TempSensor.humidity())',
+            'KEY_8': 'lambda: Display.show_message(TempSensor.temperature())',
+            'KEY_9': 'Display.show_message(run_command("TempSensor.temperature"))',
             'KEY_UP': 'Display.show_message(Btn.get_state())',
             'KEY_DOWN': 'Display.show_message(Btn.get_laststatechange())'}
 
@@ -125,9 +132,8 @@ class ir(IInput):
                 if self.__flagstop__:
                     lirc.deinit() 
                     return
-
-                codeIR = lirc.nextcode()
                 try:
+                    codeIR = lirc.nextcode()
                     if codeIR:
                         action = codeIR[0]
                         print("IR Input Received: " + action)
@@ -145,8 +151,48 @@ class ir(IInput):
                 except Exception as ex:
                     print("IR Input Error: " + str(ex))
         except KeyboardInterrupt:
-            print("Shutdown requested...exiting ir")
+            print("Shutdown requested...exiting IR")
 
-    def cleanup(self):
-        self.__flagstop = True
+class webapi(IInput):
+    def __init__(self, callback=None):
+        super(webapi, self).__init__(callback)
+        self.app = Flask(__name__)
+
+        cfg = config.get_config()
+        if cfg["webapi_port"] is not None:
+            self.webapi_port = int(cfg["webapi_port"])
+            self.webapi_address = cfg["webapi_address"]
+        else:
+            self.webapi_port = 9003
+            self.webapi_address = '0.0.0.0'
+        
+        self.routes() #load all the routes
+
+    def run(self):
+        print("Starting WebAPI Input...")
+        self.app.run(host=self.webapi_address, port=self.webapi_port, debug=True, use_reloader=False)
+    
+    #def cleanup(self):
+    #    func = request.environ.get('werkzeug.server.shutdown')
+    #    if func is not None: func()
+
+    def routes(self):
+        #we use single route to catch all
+        @self.app.route('/', defaults={'path': ''})
+        @self.app.route('/<path:path>')
+        def catch_all(path):
+            result = self.run_command(path)
+            return 'You enter: %s' % path + " Response: " + str(result)
+
+    def run_command(self, command):
+        try:
+            if (self.__callback__ != None):
+                for cb in self.__callback__:
+                    try:
+                        if cb != None: 
+                            return cb(msg=command) #do not pass the input param here as synchronus
+                    except Exception as ex:
+                        print("WebAPI Input Error: " + str(ex))
+        except Exception as ex:
+            print("WebAPI Input Error: " + str(ex))
 
