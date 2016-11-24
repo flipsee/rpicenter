@@ -1,17 +1,27 @@
 import RPi.GPIO as GPIO
-import threading, time
-from input import mqtt, console, ir, webapi
+import threading, time, inspect
 import config, devices 
+from functools import wraps
+from rpicenterModel import *
+from input import * #mqtt, console, ir, webapi
 from devices import *
-
-try:
-    from .rpicenterModel import *
-except SystemError:
-    from rpicenterModel import *
+from devices import command
 
 #1. load all devices from db.
 #2. load recipies.
 #3. wait input.
+public_commands = {}
+
+### decorator ###
+def public_command(func, *args, **kwargs):
+    """this is a Decorator to register methods that can be called in run_command\call$
+    """
+    #print("Registering Public Command: " + func.__name__ + " Doc: " + str(func.__doc$
+    public_commands[func.__name__] = str(func.__doc__)
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
 
 def insert_sample():
     db = rpicenterBL()
@@ -49,8 +59,8 @@ def load_devices():
         for entry in data:
             print("Device:" + entry.DeviceObjectID)
             devices.register_device(device_object_id=entry.DeviceObjectID, slot=entry.Slot, gpio_pin=entry.GPIOPin, location=entry.Location, is_local=entry.IsLocal, type=entry.Type)
-    except:
-        print("Error loading Devices")
+    except Exception as ex:
+        print("Error loading Devices: " + str(ex))
     finally:
         db.close()
 
@@ -58,18 +68,22 @@ def run_command(msg, input=None, requestID=None):
     #print("run_command: " + msg)
     result = ""
     try:
-        cmd = str(msg)
-        _classidx = cmd.find(".")
-        _paramidx = cmd.find("(")
+        _device_name, _method_name, _param = __parse_input__(str(msg))
+        #print(str(_device_name) + " : " + _method_name + " : " + _param)
 
-        _device_name = str(cmd[:_classidx])
-        if _paramidx < 0: # means that it doesn't have any param 
-            _method_name = str(cmd[(_classidx + 1):])
-            _param = "()"
-        else:
-            _method_name = str(cmd[(_classidx + 1):_paramidx])
-            _param = str(cmd[_paramidx:len(cmd)])
-        
+        ### call the public method ###
+        if _device_name == None:
+            try:
+                if public_commands.get(_method_name, None) != None:
+                    print("Running Public Command")
+                    result = eval(_method_name + _param)
+                    if input != None: input.reply(requestID=requestID, msg=result)
+                else: result = "Unknown Command! "
+            except KeyError:
+                result = "Unknown Command! "
+            return result
+
+        ### call the devices method ###
         device = devices.get_device(str(_device_name))
         if device is not None:        
             try:     
@@ -80,8 +94,7 @@ def run_command(msg, input=None, requestID=None):
                 __run_hooks__(device.hooks, "POST_" + _method_name)
 
                 #print("result: " + str(result))
-                if input != None: input.reply(requestID=requestID, msg=result)
-            
+                if input != None: input.reply(requestID=requestID, msg=result)            
             except Exception as ex:
                 print(str(ex))
                 result = "Error calling: " + str(msg)
@@ -99,12 +112,32 @@ def __run_hooks__(hooks, key, *args, **kwargs):
         for h_key, h_value in hooks.items():
             if h_key == key: eval(h_value)
 
+def __parse_input__(msg=None):
+    _device_name = None
+    _method_Name = None
+    _param = None
+    if command is not None:
+        cmd = str(msg)
+        _classidx = cmd.find(".")
+        _paramidx = cmd.find("(")
+
+        _device_name = str(cmd[:_classidx])
+        if _paramidx < 0: # means that it doesn't have any param
+            _method_name = str(cmd[(_classidx + 1):])
+            _param = "()"
+        else:
+            _method_name = str(cmd[(_classidx + 1):_paramidx])
+            _param = str(cmd[_paramidx:len(cmd)])
+        #print(_device_name + " : " + _method_name + " : " + _param)
+        if _classidx < 0 or (_paramidx >= 0 and _paramidx < _classidx): _device_name = None
+    return _device_name, _method_name, _param
+
 def main():
     input_channel = []
-    input_channel.append(mqtt(callback=run_command))
+    #input_channel.append(ir(callback=run_command))
+    #input_channel.append(mqtt(callback=run_command))
+    #input_channel.append(webapi(callback=run_command))
     input_channel.append(console(callback=run_command))
-    input_channel.append(ir(callback=run_command))
-    input_channel.append(webapi(callback=run_command))
     
     try:
         cfg = config.get_config()
@@ -114,6 +147,7 @@ def main():
         load_devices()
         load_hooks()
         #load_recipies()
+        print(str(public_commands))
 
         ### Input Channels ###
         for input in input_channel:
@@ -129,15 +163,35 @@ def main():
     finally:
         print("App terminated, cleanup...")
         for input in input_channel:
-            input.cleanup()
-        
+            input.cleanup()        
         devices.cleanup()
         GPIO.cleanup()
         time.sleep(0.5)
 
-def list_devices():
+
+### public command that can be called by the user. ###
+@public_command
+@command
+def list_devices(msg=None):
+    """ list devices in RPICenter"""
+    if msg is not None: print("Msg: " + str(msg))
+    #for key, value in devices.list_devices().items():
+    #    print("Key: " + key + " Value: " + str(value))
     return devices.list_devices()
 
+@public_command
+@command
+def list_commands():
+    print("i'm here")
+    return public_commands
+
+@public_command
+@command
+def show_temp_to_screen():
+    """ get the temperature and display on screen """
+    temp = run_command("TempSensor.temperature")
+    run_command("Display.show_message('" + str(temp) + "')")    
+        
 
 if __name__ == '__main__':    
     main()

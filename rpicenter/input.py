@@ -1,8 +1,8 @@
 from abc import ABCMeta, abstractmethod
-import config
+from flask import Flask, request, jsonify
 import paho.mqtt.client as mq
 import lirc
-from flask import Flask, request, jsonify
+import config
 
 class IInput:
     __metaclass__ = ABCMeta
@@ -185,8 +185,8 @@ class webapi(IInput):
         @self.app.route('/<path:path>')
         def catch_all(path):
             command = self.__parse_input__(path)
-            result = "" #self.__run_command__(command)
-            return 'You enter: %s' % command + " Response: " + str(path)
+            result = self.__run_command__(command)
+            return 'You enter: %s' % command + " Response: " + str(result)
 
     def __parse_input__(self, path):
         cmd = ""
