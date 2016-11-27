@@ -3,25 +3,14 @@ import threading, time, inspect
 import config, devices 
 from functools import wraps
 from rpicenterModel import *
-from input import * #mqtt, console, ir, webapi
-from devices import *
-from devices import command
+from input import mqtt, console, ir, webapi
+import devices
 
 #1. load all devices from db.
 #2. load recipies.
 #3. wait input.
+remote_communication = None
 public_commands = {}
-
-### decorator ###
-def public_command(func, *args, **kwargs):
-    """this is a Decorator to register methods that can be called in run_command\call$
-    """
-    #print("Registering Public Command: " + func.__name__ + " Doc: " + str(func.__doc$
-    public_commands[func.__name__] = str(func.__doc__)
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
 
 def insert_sample():
     db = rpicenterBL()
@@ -34,6 +23,7 @@ def insert_sample():
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
             db.add_Device(DeviceObjectID="Btn", Slot="5", Location="Living Room", GPIOPin=12, Type="Switch", IsLocal=True)
             db.add_Device(DeviceObjectID="Buzzer", Slot="6", Location="Living Room", GPIOPin=21, Type="Buzzer", IsLocal=True)
+            db.add_Device(DeviceObjectID="Remote1", Slot="1", Location="Main Bed Room", GPIOPin=0, Type="Remote", IsLocal=False)
     finally:
         db.close()
 
@@ -69,7 +59,7 @@ def run_command(msg, input=None, requestID=None):
     result = ""
     try:
         _device_name, _method_name, _param = __parse_input__(str(msg))
-        #print(str(_device_name) + " : " + _method_name + " : " + _param)
+        print(str(_device_name) + " : " + _method_name + " : " + _param)
 
         ### call the public method ###
         if _device_name == None:
@@ -85,7 +75,10 @@ def run_command(msg, input=None, requestID=None):
 
         ### call the devices method ###
         device = devices.get_device(str(_device_name))
-        if device is not None:        
+        #print(str(device) + ":"+ device.is_local)
+
+        #is local device
+        if device is not None and device.is_local == True:        
             try:     
                 __run_hooks__(device.hooks, "PRE_" + _method_name)
                 
@@ -98,8 +91,16 @@ def run_command(msg, input=None, requestID=None):
             except Exception as ex:
                 print(str(ex))
                 result = "Error calling: " + str(msg)
-                
-        else: result = "Unable to find Device: " + _device[0]
+
+        #is a remote device
+        elif device is not None and device.is_local == False:
+            print("Remote Device")
+            _topic = "esp8266/request/rpicenter/12345"
+            _message = _method_name + _param
+            remote_communication.publish_msg(topic=_topic, msg=_message)
+
+        #not a device, error!!!
+        else: result = "Unable to find Device: " + _device_name
     except Exception as ex:
         print(str(ex))
         result = "Invalid Message"
@@ -116,7 +117,7 @@ def __parse_input__(msg=None):
     _device_name = None
     _method_Name = None
     _param = None
-    if command is not None:
+    if msg is not None:
         cmd = str(msg)
         _classidx = cmd.find(".")
         _paramidx = cmd.find("(")
@@ -133,21 +134,24 @@ def __parse_input__(msg=None):
     return _device_name, _method_name, _param
 
 def main():
+    remote_communication = mqtt(callback=run_command) # we will use this to communicate with remote device also.
+
     input_channel = []
     #input_channel.append(ir(callback=run_command))
-    #input_channel.append(mqtt(callback=run_command))
+    input_channel.append(remote_communication)
     #input_channel.append(webapi(callback=run_command))
     input_channel.append(console(callback=run_command))
     
     try:
         cfg = config.get_config()
         GPIO.setmode(eval("GPIO." + str(cfg["gpio_type"])))
+        GPIO.setwarnings(False)
         #devices.gpio_setmode(eval("GPIO." + str(cfg["gpio_type"])))
 
         load_devices()
         load_hooks()
         #load_recipies()
-        print(str(public_commands))
+        print(str(list_devices))
 
         ### Input Channels ###
         for input in input_channel:
@@ -169,24 +173,35 @@ def main():
         time.sleep(0.5)
 
 
+### decorator ###
+def public_command(func, *args, **kwargs):
+    """this is a Decorator to register methods that can be called in run_command\call$
+    """
+    #print("Registering Public Command: " + func.__name__ + " Doc: " + str(func.__doc$
+    public_commands[func.__name__] = str(func.__doc__)
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
+
 ### public command that can be called by the user. ###
 @public_command
-@command
+@devices.command
 def list_devices(msg=None):
     """ list devices in RPICenter"""
     if msg is not None: print("Msg: " + str(msg))
-    #for key, value in devices.list_devices().items():
-    #    print("Key: " + key + " Value: " + str(value))
+    for key, value in devices.list_devices().items():
+        print("Key: " + key + " Value: " + str(value))
     return devices.list_devices()
 
 @public_command
-@command
+@devices.command
 def list_commands():
     print("i'm here")
     return public_commands
 
 @public_command
-@command
+@devices.command
 def show_temp_to_screen():
     """ get the temperature and display on screen """
     temp = run_command("TempSensor.temperature")

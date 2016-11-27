@@ -66,22 +66,24 @@ class mqtt(IInput):
                     print("MQTT Input Error: " + str(ex))
 
     def publish_msg(self, topic, msg):
-        self.client.publish(topic, msg)
+        print("MQTT Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
+        self.client.publish(topic, str(msg))
 
     def reply(self, requestID, msg):
         topic = str(self.publish_topic) + str(requestID)
-        print("MQTT Input Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
-        self.publish_msg(topic, str(msg))
+        self.publish_msg(topic, msg)
 
     def run(self):
         print("Starting MQTT Input...")
         try:
-            self.client.loop_forever()
+            if self.client is not None: self.client.loop_start()
         except Exception as ex:
             print("MQTT Input Error: " + str(ex))
 
     def cleanup(self):
-        if self.client is not None: self.client.disconnect()
+        if self.client is not None:
+            self.client.loop_stop() 
+            self.client.disconnect()
 
 class console(IInput):
     def __init__(self, callback=None):
@@ -116,7 +118,7 @@ class ir(IInput):
             'KEY_7': 'Display.clear',
             'KEY_8': 'lambda: Display.show_message(TempSensor.temperature())',
             'KEY_9': 'Display.show_message(run_command("TempSensor.temperature"))',
-            'KEY_UP': 'Display.show_message(Btn.get_state())',
+            'KEY_UP': 'show_temp_to_screen',
             'KEY_DOWN': 'Display.show_message(Btn.get_laststatechange())'}
 
     def __init__(self, callback=None):

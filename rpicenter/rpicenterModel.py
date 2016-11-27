@@ -20,7 +20,7 @@ class Devices(BaseModel):
     Slot = TextField(db_column='Slot', null=False)
     GPIOPin = IntegerField(db_column='GPIOPin', null=True)
     Location = TextField(db_column='Location', null=False)
-    IsLocal = TextField(db_column='IsLocal', null=False)
+    IsLocal = IntegerField(db_column='IsLocal', null=False)
     Type = TextField(db_column='Type', null=False)    
     class Meta:
         db_table = 'Devices'
