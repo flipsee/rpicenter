@@ -38,6 +38,8 @@ class rpicenter:
     def __init__(self):
         self.relay_channel = None
         self.input_channel = []
+        self.config = config.get_config()
+        self.device_name = self.config["device_name"]
 
     def load_channels(self):
         self.relay_channel = mqtt(callback=run_command) # we will use this to communicate with remote device also.
@@ -69,17 +71,14 @@ class rpicenter:
         return load_hooks()
 
     def run_command(self, msg, input=None, requestID=None):
-        print("run_command: " + msg)
         _result = None
         try:
             _device_name, _method_name, _param = parse_input(str(msg))
-            print(str(_device_name) + " : " + _method_name + " : " + _param)
+            #print(str(_device_name) + " : " + _method_name + " : " + _param)
 
-            if _device_name == None:
-                ### call the public method ###
+            if _device_name == None: ### call the public method ###
                 _result = commands.run_command(_method_name, _param)
-            else:
-                ### call the devices method ###
+            else: ### call the devices method ###
                 _result = devices.run_command(_device_name, _method_name, _param)
 
             if input != None: input.reply(requestID=requestID, msg=_result)
@@ -88,7 +87,6 @@ class rpicenter:
             _result = "Err: " + str(ex)
         finally:
             return _result
-            #print(str(result))
 
     def run(self):
         try:

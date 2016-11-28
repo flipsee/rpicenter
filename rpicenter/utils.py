@@ -30,7 +30,7 @@ def run_hooks(hooks, key, *args, **kwargs):
     if (hooks != None):
         for h_key, h_value in hooks.items():
             if h_key == key: 
-                print("Running: " + str(key) + " ; " + str(h_value))
+                #print("Running: " + str(key) + " ; " + str(h_value))
                 try:
                    eval(h_value)
                    #h_value()

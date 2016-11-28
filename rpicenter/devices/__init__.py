@@ -34,7 +34,7 @@ class DeviceDispatcher:
             return False
 
     def run_command(self, device_object_id, method_name, param, *args, **kwargs):
-        print("devices run command called")
+        #print("devices run command called")
         _result = None
         _device = self.get_device(str(device_object_id))
         if _device is not None: 
@@ -46,11 +46,12 @@ class DeviceDispatcher:
                 except Exception as ex:
                     print(str(ex))
                     _result = "Err: " + str(ex) 
-            elif device.is_local == False:
+            elif _device.is_local == False:
                 print("Remote Device")
                 try:
                     utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)
-                    _topic, _message = eval('getattr(_device, method_name)' + param)
+                    _topic, _message = _device.compose_message(method_name, param)
+                    print("Topic: " + _topic + ",Msg: " + _message)
                     self.relay_channel.publish_msg(topic=_topic, msg=_message)
                     utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
                 except Exception as ex:
