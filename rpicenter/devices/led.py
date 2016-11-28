@@ -1,5 +1,6 @@
-from . import Device, command, GPIO
+from devices.device import Device, command
 from datetime import datetime
+import RPi.GPIO as GPIO
 import threading
 
 class Led(Device):

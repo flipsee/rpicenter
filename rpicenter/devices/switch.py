@@ -1,5 +1,6 @@
-from . import Device, command, GPIO
+import RPi.GPIO as GPIO
 from datetime import datetime
+from devices.device import Device, command
 
 class Switch(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):

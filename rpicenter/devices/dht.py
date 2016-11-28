@@ -1,4 +1,4 @@
-from . import Device, command
+from devices.device import Device, command
 from datetime import datetime
 import Adafruit_DHT #library for the the DHT sensor.
 

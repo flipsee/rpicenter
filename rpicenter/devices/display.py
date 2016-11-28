@@ -1,12 +1,7 @@
-from . import Device, command
-#from rpicenter import Device
-#import rpicenter
-
+from devices.device import Device, command
 import time
-
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_SSD1306
-
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont

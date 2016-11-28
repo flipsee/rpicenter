@@ -1,4 +1,4 @@
-from . import Device, command
+from devices.device import Device, command
 import time
 import RPi.GPIO as GPIO
 import threading
