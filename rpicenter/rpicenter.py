@@ -2,7 +2,7 @@ import RPi.GPIO as GPIO
 import threading, time, inspect
 import config 
 from rpicenterModel import *
-from input import mqtt, console, ir, webapi
+from input import MQTT, Console, IR, WebAPI, Message, Queue
 from utils import parse_input
 from devices import devices
 from commands import commands
@@ -33,20 +33,23 @@ def load_hooks():
     Btn = devices.get_device("Btn")
     Btn.add_callback(lambda: run_command('RedLed.toggle'))
 
-
-class rpicenter:
+class RPiCenter:
     def __init__(self):
-        self.relay_channel = None
-        self.input_channel = []
+        self.__input_channel__ = []
         self.config = config.get_config()
         self.device_name = self.config["device_name"]
+        self.queue = Queue() #<<< this queue is only for sending relay message to a remote device...
 
     def load_channels(self):
-        self.relay_channel = mqtt(callback=run_command) # we will use this to communicate with remote device also.
-        #self.input_channel.append(ir(callback=run_command))
-        self.input_channel.append(self.relay_channel)
-        #input_channel.append(webapi(callback=run_command))
-        self.input_channel.append(console(callback=run_command))
+        #self.__input_channel__.append(WebAPI(callback=self.run_command, port=self.config["webapi_port"], address=self.config["webapi_address"]))
+        #self.__input_channel__.append(IR(callback=self.run_command))
+        self.__input_channel__.append(Console(callback=self.run_command))
+
+        # we will use this to communicate with remote device also.
+        _mqtt = MQTT(callback=self.queue.response, server=self.config["mqtt_server"], port=self.config["mqtt_port"], subscribe_topic=self.config["mqtt_subscribe"])
+        self.queue.send_message = _mqtt.send_message
+        self.queue.message_notfound = self.run_command
+        self.__input_channel__.append(_mqtt)
 
     def load_devices(self):
         db = rpicenterBL()
@@ -63,6 +66,7 @@ class rpicenter:
                 devices.add_device(device_object_id=entry.DeviceObjectID, slot=entry.Slot, gpio_pin=entry.GPIOPin, location=entry.Location, is_local=entry.IsLocal, type=entry.Type)
         except Exception as ex:
             print("Error loading Devices: " + str(ex))
+            raise
         finally:
             db.close()
 
@@ -76,15 +80,21 @@ class rpicenter:
             _device_name, _method_name, _param = parse_input(str(msg))
             #print(str(_device_name) + " : " + _method_name + " : " + _param)
 
-            if _device_name == None: ### call the public method ###
+            if _device_name == None: 
+                ### call the public method ###
                 _result = commands.run_command(_method_name, _param)
-            else: ### call the devices method ###
+            else: 
+                ### call the devices method ###
                 _result = devices.run_command(_device_name, _method_name, _param)
+
+            if isinstance(_result, Message):
+                _result = self.queue.enqueue(_result)
 
             if input != None: input.reply(requestID=requestID, msg=_result)
         except Exception as ex:
             print(str(ex))
             _result = "Err: " + str(ex)
+            raise
         finally:
             return _result
 
@@ -100,25 +110,25 @@ class rpicenter:
 
             ### Input Channels ###
             self.load_channels()
-            for input in self.input_channel:
+            for input in self.__input_channel__:
                 i = threading.Thread(target=input.run)
                 i.daemon = True
                 i.start()
-
-            devices.relay_channel = self.relay_channel
 
             # the below is to suspend the thread so it will not quit
             while True:
                 pass
         except Exception as ex:
-            print(str(ex))
-        
+            print("Err: " + str(ex))
+            raise
+
     def cleanup(self):
-        for input in self.input_channel:
+        for input in self.__input_channel__:
             input.cleanup()        
+        self.queue.cleanup()
         devices.cleanup()
         GPIO.cleanup()
         time.sleep(0.5)
 
-rpic = rpicenter()
-run_command = rpic.run_command
+#singleton for RPiCenter
+rpicenter = RPiCenter()

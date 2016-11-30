@@ -23,7 +23,7 @@ def parse_input(msg=None):
 
 def run_hooks(hooks, key, *args, **kwargs):
     #print(str(rpicenter))
-    run_command = rpicenter.run_command
+    run_command = rpicenter.rpicenter.run_command
 
     #print(str(run_command))
     #print("Hooks: " + str(hooks) + " ; Key: " + str(key))
@@ -36,3 +36,4 @@ def run_hooks(hooks, key, *args, **kwargs):
                    #h_value()
                 except Exception as ex:
                     print(str(ex))
+                    raise

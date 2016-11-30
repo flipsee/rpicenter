@@ -1,4 +1,3 @@
-#from functools import wraps
 import RPi.GPIO as GPIO
 import sys, os, glob, inspect, importlib
 import utils
@@ -6,7 +5,6 @@ from devices.device import Device
 
 class DeviceDispatcher:
     def __init__(self):
-        self.relay_channel = None
         self.__devices__ = {}
         self.__device_list__ = {}
         self.__hooks__ = {}
@@ -34,7 +32,7 @@ class DeviceDispatcher:
             return False
 
     def run_command(self, device_object_id, method_name, param, *args, **kwargs):
-        #print("devices run command called")
+        #print("devices run command called: " + device_object_id)
         _result = None
         _device = self.get_device(str(device_object_id))
         if _device is not None: 
@@ -46,22 +44,22 @@ class DeviceDispatcher:
                 except Exception as ex:
                     print(str(ex))
                     _result = "Err: " + str(ex) 
+                    raise
             elif _device.is_local == False:
                 print("Remote Device")
                 try:
                     utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)
-                    _topic, _message = _device.compose_message(method_name, param)
-                    print("Topic: " + _topic + ",Msg: " + _message)
-                    self.relay_channel.publish_msg(topic=_topic, msg=_message)
+                    _result = eval('getattr(_device, method_name)' + param)               
+                    # _topic, _message = _device.compose_message(method_name, param)
+                    #print("Topic: " + _topic + ",Msg: " + _message)
+                    #self.relay_channel.publish_msg(topic=_topic, msg=_message)
                     utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
                 except Exception as ex:
                     print(str(ex))
                     _result = "Err: " + str(ex)
-
-                #_topic, _message = eval('getattr(_device, method_name)' + param)
-                #_topic = _device.device_object_id + "/request/rpicenter/12345"
-                #_message = method_name + param
-        else: _result = "Unable to find Device: " + device_object_id
+                    raise
+        else: 
+            _result = "Unable to find Device: " + device_object_id
         return _result
 
     def add_hook(self, key, func):

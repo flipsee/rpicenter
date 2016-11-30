@@ -1,8 +1,35 @@
 from abc import ABCMeta, abstractmethod
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
+import threading, uuid, time
 import paho.mqtt.client as mq
 import lirc
-import config
+
+class Message():
+    msg_status = {'NEW': "New Message in Queue not send yet",
+              'WAITING': "Message sent, waiting for response",
+              'EXPIRED': "Message exceed retries or expired",
+              'SUCCESS': "Response Received from remote"}
+
+    def __init__(self, msg, sender, receiver, on_response=None, on_expiry=None, expiry=60):
+        self.msg = msg
+        self.sender = sender.lower()
+        self.receiver = receiver.lower()
+        self.msg_id = self.sender + "_" + str(uuid.uuid4())
+        #self.msg_id = "12345"
+        self.retry_count = 0
+        self.last_retry = datetime.min
+        self.msg_timestamp = datetime.now()
+        self.msg_timestamp_utc = datetime.utcnow()
+        self.msg_expiry = self.msg_timestamp + timedelta(seconds=expiry)
+        self.response = None
+        self.status = self.msg_status["NEW"]
+        self.parameters = None
+        self.on_response = on_response        
+        if on_expiry is not None:
+            self.on_expiry = on_expiry
+        else:
+            self.on_expiry = self.on_response
 
 class IInput:
     __metaclass__ = ABCMeta
@@ -18,33 +45,36 @@ class IInput:
     def cleanup(self):
         self.__flagstop__ = True
 
-    def reply(self, msg, requestID=None):
-        _result = "Reply Msg: " + str(msg)
-        if requestID != None: _result = "Reply RequestID: " + str(requestID) + " Msg: " + str(msg)
+    def reply(self, **kwargs):
+        _result = 'Reply'
+
+        _requestID = kwargs.get('requestID', None)
+        if _requestID is not None: _result = _result + " RequestID: " + str(_requestID)
+
+        _msg = kwargs.get('msg', None)
+        if _msg is not None: _result = _result + " Msg: " + str(_msg)
+
+        _message = kwargs.get('message', None)
+        if _message is not None: _result = "Reply RequestID: " + str(message.msg_id) + " Msg: " + str(message.msg) + " Response: " + str(message.response)
+
         print(_result)
     
     @abstractmethod
     def run(self): raise NotImplementedError
 
+    @abstractmethod
+    def send_message(self, message): raise NotImplementedError
 
-class mqtt(IInput):
-    def __init__(self,server=None, port=None, subscribe_topic=None, publish_topic=None, callback=None):
-        super(mqtt, self).__init__(callback)
+class MQTT(IInput):
+    def __init__(self, server, port, subscribe_topic, publish_topic=None, callback=None):
+        super(MQTT, self).__init__(callback)
         self.last_requestID = None
 
         self.client = mq.Client()
         self.client.on_connect = self.__client_connect__
         self.client.on_message = self.__client_message__
-
-        cfg = config.get_config()        
-        if cfg["mqtt_server"] is not None:
-            self.subscribe_topic = cfg["mqtt_subscribe"]
-            self.publish_topic = cfg["mqtt_publish"]
-            server = str(cfg["mqtt_server"]) 
-            port = int(cfg["mqtt_port"])
-        else:
-            self.subscribe_topic = subscribe_topic
-            self.publish_topic = publish_topic
+        self.subscribe_topic = subscribe_topic
+        self.publish_topic = publish_topic
         self.client.connect(server, int(port), 60)
 
     def __client_connect__(self, client, userdata, flags, rc):
@@ -55,7 +85,8 @@ class mqtt(IInput):
         print("MQTT Received Topic: " + msg.topic + " Msg: " + str(msg.payload))
         _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
         
-        requestID = msg.topic.replace(self.subscribe_topic.replace('+','').replace('#', ''),'')
+        _topics = msg.topic.split("/")        
+        requestID = _topics[-1] # last section is the msg_id
         self.last_requestID = requestID     
 
         if (self.__callback__ != None):
@@ -65,13 +96,26 @@ class mqtt(IInput):
                 except Exception as ex:
                     print("MQTT Input Error: " + str(ex))
 
-    def publish_msg(self, topic, msg):
-        print("MQTT Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
-        self.client.publish(topic, str(msg))
+    def publish_msg(self, msg, topic=None):
+        _topic = self.publish_topic
+        if topic is not None: _topic = topic        
 
-    def reply(self, requestID, msg):
-        topic = str(self.publish_topic) + str(requestID)
-        self.publish_msg(topic, msg)
+        print("MQTT Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
+        self.client.publish(_topic, str(msg))
+
+    def send_message(self, message):
+        try:
+            self.reply(message)
+            return True, "Message sent"
+        except:
+            return False, "Failed to send message"
+
+    def reply(self, message):
+        """ {ESP8266}/inbox/{RPiCenter}/{Date Time}/{Trx ID} """
+        if message is not None and isinstance(message, Message):
+            _topic = message.receiver + "/inbox/" + message.sender + "/" + str(message.msg_timestamp) + "/" + str(message.msg_id)
+            print("MQTT Publishing Message Topic: " + str(_topic) + " Msg: " + str(message.msg))
+            self.client.publish(_topic, str(message.msg))
 
     def run(self):
         print("Starting MQTT Input...")
@@ -85,9 +129,9 @@ class mqtt(IInput):
             self.client.loop_stop() 
             self.client.disconnect()
 
-class console(IInput):
+class Console(IInput):
     def __init__(self, callback=None):
-        super(console, self).__init__(callback)
+        super(Console, self).__init__(callback)
 
     def run(self):
         self.__flagstop__ = False
@@ -106,8 +150,9 @@ class console(IInput):
                             print("Console Input Error: " + str(ex))
             except Exception as ex:
                 print("Console Input Error: " + str(ex))            
+                raise
 
-class ir(IInput):
+class IR(IInput):
     __remote_command__ = {'KEY_0': 'RedLed.on',
             'KEY_1': 'RedLed.off',
             'KEY_2': 'GreenLed.on',
@@ -122,7 +167,7 @@ class ir(IInput):
             'KEY_DOWN': 'Display.show_message(Btn.get_laststatechange())'}
 
     def __init__(self, callback=None):
-        super(ir, self).__init__(callback)
+        super(IR, self).__init__(callback)
 
     def run(self):
         self.__flagstop__ = False
@@ -150,24 +195,20 @@ class ir(IInput):
                                         if command != "Empty": cb(msg=command, input=self)
                                     except Exception as ex:
                                         print("IR Input Error: " + str(ex))
+                                        raise
                 except Exception as ex:
                     print("IR Input Error: " + str(ex))
+                    raise
         except KeyboardInterrupt:
             print("Shutdown requested...exiting IR")
+            raise
 
-class webapi(IInput):
-    def __init__(self, callback=None):
-        super(webapi, self).__init__(callback)
+class WebAPI(IInput):
+    def __init__(self, address, port, callback=None):
+        super(WebAPI, self).__init__(callback)
         self.app = Flask(__name__)
-
-        cfg = config.get_config()
-        if cfg["webapi_port"] is not None:
-            self.webapi_port = int(cfg["webapi_port"])
-            self.webapi_address = cfg["webapi_address"]
-        else:
-            self.webapi_port = 9003
-            self.webapi_address = '0.0.0.0'
-        
+        self.webapi_port = int(port)
+        self.webapi_address = str(address)
         self.routes() #load all the routes
 
     def run(self):
@@ -215,4 +256,84 @@ class webapi(IInput):
                         print("WebAPI Input Error: " + str(ex))
         except Exception as ex:
             print("WebAPI Input Error: " + str(ex))
+            raise
+
+
+class Queue:
+    def __init__(self, send_message=None, message_notfound=None):
+        self.max_retry = 3
+        self.retry_waiting_time = 5
+        self.send_message = send_message
+        self.message_notfound = message_notfound
+        self.queue = {}
+        self.queue_thread = None
+        self.queue_flagstop = False
+
+    def enqueue(self, message): #add msg to queue
+        print("add Msg to Queue")
+        if isinstance(message, Message):
+            self.queue.setdefault(message.msg_id, message)
+            print(str(self.queue))
+            self.queue_flagstop = False
+            self.run()
+            return "Message Queued, MsgID: " + message.msg_id
+        else: return "Message Queue is invalid"
+
+    def dequeue(self, msg_id): #remove msg from queue manually
+        return self.queue.pop(msg_id, None)
+        
+    def expired(self, msg_id): #if max retries reach or message expired we remove it from the queue, run on on_expired
+        message = self.queue.pop(msg_id, None)
+        print("Expired Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
+        if message is not None:
+            message.status =  message.msg_status["EXPIRED"]
+            if message.on_expiry is not None: return message.on_expiry(message)
+        return
+
+    def response(self, msg, requestID, *args, **kwargs): #if response is received, parse it and call on_response, remove it from the queue.
+        message = self.queue.pop(requestID, None)
+        if message is not None:
+            if message.on_response is not None:
+                message.status =  message.msg_status["SUCCESS"]
+                message.response = msg
+                old_sender = message.sender
+                message.sender = message.receiver
+                message.receiver = old_sender
+                return message.on_response(message)
+            else: return
+        else: return self.message_notfound(msg=msg, requestID=requestID, *args, **kwargs)
+
+    def send(self, message):
+        print("Sending Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
+        message.retry_count = message.retry_count + 1
+        message.last_retry = datetime.now()
+        message.status =  message.msg_status["WAITING"]
+        send_status, response = self.send_message(message)
+        if send_status == True and message.on_response == None: #fire and forget
+            self.dequeue(msg.msg_id)
+
+    def __run_queue__(self):
+        while True:
+            #lets check if there is an item in the queue if not stop.
+            if len(self.queue) < 1 or self.queue_flagstop == True: 
+                print("Stoping Queue Job...")
+                return
+            for key, msg in list(self.queue.items()):
+                #check which one need tobe send
+                if msg.status == msg.msg_status["NEW"] or (msg.retry_count <= self.max_retry and msg.last_retry + timedelta(seconds=self.retry_waiting_time) <= datetime.now()):
+                    self.send(msg)
+                elif msg.retry_count > self.max_retry or msg.msg_expiry < datetime.now():
+                    self.expired(msg.msg_id)
+            time.sleep(10)
+
+    def run(self):
+        print("Starting Queue Job...")
+        self.queue_thread = threading.Thread(target=self.__run_queue__)
+        if self.queue_thread is not None and self.queue_thread.isAlive() == False:
+            self.queue_thread.start()
+        return self
+
+    def cleanup(self):
+        self.queue_flagstop = True
+        self.queue.clear()
 

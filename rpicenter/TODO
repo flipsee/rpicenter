@@ -7,3 +7,9 @@
 
 
 https://learn.adafruit.com/animated-electronic-eyes-using-teensy-3-1/bowler-hat
+
+
+Remote1.get_commands
+
+mosquitto_pub -p 1999 -t "rpicenter/inbox/remote1/2016-11-30 06:12:59.114634/12345" 
+-m "['add_hook', 'blink', 'cleanup', 'get_commands', 'get_laststatechange', 'get_state', 'off', 'on', 'toggle']"
