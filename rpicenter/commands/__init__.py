@@ -23,10 +23,11 @@ class CommandDispatcher:
             return wrapper
 
     def run_command(self, method_name, param, *args, **kwargs):
-        #print("Running Public Command")
+        #print("Running Public Command: " + method_name)
         _result = None
         try:
             _func =  self.__commands__.get(method_name, None)
+            #print(str(_func))
             if _func != None:
                 utils.run_hooks(self.__hooks__, "PRE_" + method_name)
                 _result = eval('_func' + param)
@@ -46,6 +47,9 @@ class CommandDispatcher:
         self.__commands__ = {}
         self.__command_list__ = {}
         self.__hooks__ = {}
+
+    def get_command(self, method_name):
+        return self.__commands__.get(method_name, None)
 
     def get_commands(self):
         return self.__command_list__

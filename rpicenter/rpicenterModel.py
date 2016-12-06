@@ -25,10 +25,21 @@ class Devices(BaseModel):
     class Meta:
         db_table = 'Devices'
 
+class DeviceReading(BaseModel):
+    DeviceObjectID = TextField(db_column='DeviceObjectID', null=False)
+    ReadingDateTime = TextField(db_column='ReadingDateTime', null=False)
+    Parameter = TextField(db_column='Parameter', null=False)
+    Value = DoubleField(db_column='Value', null=False)
+    Unit = TextField(db_column='Unit', null=True)
+    class Meta:
+        db_table = 'DeviceReading'
+        primary_key = CompositeKey('DeviceObjectID', 'ReadingDateTime', 'Parameter', 'Unit')
+
 class rpicenterBL(object):
     def __init__(self):
         database.connect()
         database.create_tables([Devices], safe=True)
+        database.create_tables([DeviceReading], safe=True)
 
     def atomic(self):
         return database.atomic()
@@ -37,10 +48,10 @@ class rpicenterBL(object):
         database.close()
 
     ##### Devices Table - Start #####
-    def get_devices(self):
+    def get_Devices(self):
         return Devices.select()
     
-    def clear_devices(self):
+    def clear_Devices(self):
         q = Devices.delete()
         q.execute()
 
@@ -54,3 +65,18 @@ class rpicenterBL(object):
             raise ValueError("Data already exists.")
     ##### Devices Table - Stop #####
 
+    def get_DeviceReading(self):
+        return DeviceReading.select()
+
+    def clear_DeviceReading(self):
+        q = DeviceReading.delete()
+        q.execute()
+
+    def add_DeviceReading(self, rows):
+        Devices.insert_many(rows).execute()
+
+    def add_DeviceReading(self, DeviceObjectID, ReadingDateTime, Parameter, Value, Unit):
+        try:
+            DeviceReading.create(DeviceObjectID=DeviceObjectID, ReadingDateTime=ReadingDateTime, Parameter=Parameter, Value=Value, Unit=Unit)
+        except IntegrityError:
+            raise ValueError("Data already exists.")

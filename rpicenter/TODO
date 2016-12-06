@@ -2,9 +2,9 @@
 #2. ir command
 #3. webide
 #4. recipies
-5. remote devices? 
-    -> send msg via MQTT to remote devices.
-
+$5. remote devices? 
+    $-> send msg via MQTT to remote devices.
+6. allow the Mqtt to subscribe to multiple message and each message can have its own callback???
 
 https://learn.adafruit.com/animated-electronic-eyes-using-teensy-3-1/bowler-hat
 

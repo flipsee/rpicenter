@@ -14,8 +14,12 @@ def parse_input(msg=None):
             _method_name = str(cmd[(_classidx + 1):])
             _param = "()"
         else:
-            _method_name = str(cmd[(_classidx + 1):_paramidx])
+            if _paramidx < _classidx:
+                _method_name = str(cmd[0:_paramidx])
+            else:
+                _method_name = str(cmd[(_classidx + 1):_paramidx])
             _param = str(cmd[_paramidx:len(cmd)])
+
         #print(_device_name + " : " + _method_name + " : " + _param)
         if _classidx < 0 or (_paramidx >= 0 and _paramidx < _classidx): _device_name = None
     return _device_name, _method_name, _param

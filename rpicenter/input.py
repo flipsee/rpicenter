@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
-import threading, uuid, time
+import threading, uuid, time, ast
 import paho.mqtt.client as mq
 import lirc
 
@@ -11,11 +11,14 @@ class Message():
               'EXPIRED': "Message exceed retries or expired",
               'SUCCESS': "Response Received from remote"}
 
-    def __init__(self, msg, sender, receiver, on_response=None, on_expiry=None, expiry=60):
+    def __init__(self, msg, sender, receiver, on_response=None, on_expiry=None, requestID=None, expiry=60):
         self.msg = msg
         self.sender = sender.lower()
         self.receiver = receiver.lower()
-        self.msg_id = self.sender + "_" + str(uuid.uuid4())
+        if requestID is not None:
+            self.msg_id = str(requestID)
+        else:
+            self.msg_id = self.sender + "_" + str(uuid.uuid4())
         #self.msg_id = "12345"
         self.retry_count = 0
         self.last_retry = datetime.min
@@ -31,18 +34,39 @@ class Message():
         else:
             self.on_expiry = self.on_response
 
+    def response_received(self, response): #if response is received, parse it and call on_response callback
+        print("i'm in the Message.response")
+        if self.on_response is not None:
+            self.status =  self.msg_status["SUCCESS"]
+            self.response = response
+            _old_sender = self.sender
+            self.sender = self.receiver
+            self.receiver = _old_sender
+            return self.on_response(self)
+        else: return
+
+
 class IInput:
     __metaclass__ = ABCMeta
     
-    def __init__(self, callback=None):
+    def __init__(self, callback=None, queue=False):
         self.__flagstop__ = False
         self.__callback__ = []
+        if queue == True:
+            self.__queue__ = Queue()
+            self.__queue__.send_message = self.send_message
+        else: 
+            self.__queue__ = None
         if callback != None: self.__callback__.append(callback)
+
+    def get_queue(self):
+        return self.__queue__
 
     def add_callback(self, callback):
         self.__callback__.append(callback)
 
     def cleanup(self):
+        if self.__queue__ is not None: self.__queue__.cleanup()
         self.__flagstop__ = True
 
     def reply(self, **kwargs):
@@ -65,17 +89,22 @@ class IInput:
     @abstractmethod
     def send_message(self, message): raise NotImplementedError
 
-class MQTT(IInput):
-    def __init__(self, server, port, subscribe_topic, publish_topic=None, callback=None):
-        super(MQTT, self).__init__(callback)
-        self.last_requestID = None
-
+class MQTT(IInput): #make mqtt class to also inherit the queue to simplify the structure???
+    def __init__(self, server, port, subscribe_topic, publish_topic=None, callback=None, queue=None):
+        super(MQTT, self).__init__(callback, queue)
         self.client = mq.Client()
         self.client.on_connect = self.__client_connect__
         self.client.on_message = self.__client_message__
         self.subscribe_topic = subscribe_topic
         self.publish_topic = publish_topic
         self.client.connect(server, int(port), 60)
+        self.__event_subscriptions__ = {} #topic, callback method.
+    
+    def add_event_subscription(self, event_name, callback):
+        self.client.subscribe(event_name)
+        _event_name = event_name.replace("#", "").replace("+", "")
+        print("Subscribing to: " + _event_name + ", callback: " + str(callback))
+        self.__event_subscriptions__.update({_event_name: callback})
 
     def __client_connect__(self, client, userdata, flags, rc):
         print("Subscribing to: " + str(self.subscribe_topic))
@@ -84,17 +113,39 @@ class MQTT(IInput):
     def __client_message__(self, client, userdata, msg):
         print("MQTT Received Topic: " + msg.topic + " Msg: " + str(msg.payload))
         _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
-        
-        _topics = msg.topic.split("/")        
-        requestID = _topics[-1] # last section is the msg_id
-        self.last_requestID = requestID     
 
-        if (self.__callback__ != None):
-            for cb in self.__callback__:
+        _found_in_subscription = False
+        for key, callback in self.__event_subscriptions__.items():
+            if msg.topic.startswith(key):
+                _found_in_subscription = True
                 try:
-                    if cb != None: cb(msg=_msg, input=self, requestID=requestID)
+                    print(ast.literal_eval(_msg))
+                    callback(**ast.literal_eval(_msg))
+                    return
                 except Exception as ex:
-                    print("MQTT Input Error: " + str(ex))
+                    print("MQTT Subscription Error: " + str(ex))
+                    raise
+
+        if _found_in_subscription == False:
+            _topics = msg.topic.split("/")
+            _requestID=_topics[-1]
+            _message = None
+
+            if self.__queue__ is not None:
+                _message = self.__queue__.dequeue(_requestID)
+        
+            if _message is not None:            
+                _message.response_received(response=_msg)
+            else:
+                _message = Message(msg=_msg, sender=_topics[0], receiver=_topics[2], requestID=_topics[-1])
+
+                if (self.__callback__ != None):
+                    for cb in self.__callback__:
+                        try:
+                            if cb != None: cb(msg=_message.msg, input=self, requestID=_message.msg_id, message=_message)
+                        except Exception as ex:
+                            print("MQTT Input Error: " + str(ex))
+                            raise
 
     def publish_msg(self, msg, topic=None):
         _topic = self.publish_topic
@@ -110,12 +161,18 @@ class MQTT(IInput):
         except:
             return False, "Failed to send message"
 
-    def reply(self, message):
+    def reply(self, **kwargs):
+        _message = kwargs.get('message', None)
         """ {ESP8266}/inbox/{RPiCenter}/{Date Time}/{Trx ID} """
-        if message is not None and isinstance(message, Message):
-            _topic = message.receiver + "/inbox/" + message.sender + "/" + str(message.msg_timestamp) + "/" + str(message.msg_id)
-            print("MQTT Publishing Message Topic: " + str(_topic) + " Msg: " + str(message.msg))
-            self.client.publish(_topic, str(message.msg))
+        if _message is not None and isinstance(_message, Message):
+            _topic = _message.receiver + "/inbox/" + _message.sender + "/" + str(_message.msg_timestamp) + "/" + str(_message.msg_id)
+            #do we need to publish the Msg or the Response?
+            if _message.response is not None:
+                _msg = _message.response
+            else:
+                _msg = _message.msg
+            print("MQTT Publishing Message Topic: " + str(_topic) + " Msg: " + str(_msg))
+            self.client.publish(_topic, str(_msg))
 
     def run(self):
         print("Starting MQTT Input...")
@@ -125,6 +182,7 @@ class MQTT(IInput):
             print("MQTT Input Error: " + str(ex))
 
     def cleanup(self):
+        super(MQTT, self).cleanup()
         if self.client is not None:
             self.client.loop_stop() 
             self.client.disconnect()
@@ -189,7 +247,7 @@ class IR(IInput):
                                 if cb != None:
                                     try:
                                         #find the command from the dict
-                                        command = ir.__remote_command__.get(action,"Empty")
+                                        command = self.__remote_command__.get(action,"Empty")
                                         print("IR Remote Command: " + str(command))
 
                                         if command != "Empty": cb(msg=command, input=self)
@@ -264,10 +322,11 @@ class Queue:
         self.max_retry = 3
         self.retry_waiting_time = 5
         self.send_message = send_message
-        self.message_notfound = message_notfound
+        #self.message_notfound = message_notfound
         self.queue = {}
         self.queue_thread = None
         self.queue_flagstop = False
+        self.queue_waiting_time = 15
 
     def enqueue(self, message): #add msg to queue
         print("add Msg to Queue")
@@ -290,18 +349,19 @@ class Queue:
             if message.on_expiry is not None: return message.on_expiry(message)
         return
 
-    def response(self, msg, requestID, *args, **kwargs): #if response is received, parse it and call on_response, remove it from the queue.
-        message = self.queue.pop(requestID, None)
-        if message is not None:
-            if message.on_response is not None:
-                message.status =  message.msg_status["SUCCESS"]
-                message.response = msg
-                old_sender = message.sender
-                message.sender = message.receiver
-                message.receiver = old_sender
-                return message.on_response(message)
-            else: return
-        else: return self.message_notfound(msg=msg, requestID=requestID, *args, **kwargs)
+    #def response(self, msg, requestID, *args, **kwargs): #if response is received, parse it and call on_response, remove it from the queue.
+    #    _message = self.queue.pop(requestID, None)
+    #    if _message is not None:
+    #        if _message.on_response is not None:
+    #            _message.status =  _message.msg_status["SUCCESS"]
+    #            _message.response = msg
+    #            _old_sender = _message.sender
+    #            _message.sender = _message.receiver
+    #            _message.receiver = _old_sender
+    #            return _message.on_response(_message)
+    #        else: return
+    #    else: #this is a new message received from the sender, lets parse it and create new message object to pass arround
+    #        return self.message_notfound(msg=msg, requestID=requestID, *args, **kwargs)
 
     def send(self, message):
         print("Sending Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
@@ -324,7 +384,7 @@ class Queue:
                     self.send(msg)
                 elif msg.retry_count > self.max_retry or msg.msg_expiry < datetime.now():
                     self.expired(msg.msg_id)
-            time.sleep(10)
+            time.sleep(self.queue_waiting_time)
 
     def run(self):
         print("Starting Queue Job...")

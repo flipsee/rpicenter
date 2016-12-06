@@ -1,6 +1,7 @@
 import RPi.GPIO as GPIO
 from datetime import datetime
 from devices.device import Device, command
+import rpicenter
 
 class Switch(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
@@ -32,6 +33,7 @@ class Switch(Device):
             self._state = False
 
     def __state_changed__(self, channel):
+        run_command = rpicenter.run_command
         self.__read_state__()
         print("Button State changed")
         self._last_state_changed = datetime.now()

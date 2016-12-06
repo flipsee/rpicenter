@@ -21,7 +21,7 @@ def insert_sample():
             db.add_Device(DeviceObjectID="Display", Slot="4", Location="Living Room", GPIOPin=24, Type="Display", IsLocal=True)
             db.add_Device(DeviceObjectID="Btn", Slot="5", Location="Living Room", GPIOPin=12, Type="Switch", IsLocal=True)
             db.add_Device(DeviceObjectID="Buzzer", Slot="6", Location="Living Room", GPIOPin=21, Type="Buzzer", IsLocal=True)
-            db.add_Device(DeviceObjectID="Remote1", Slot="1", Location="Main Bed Room", GPIOPin=0, Type="Remote", IsLocal=False)
+            db.add_Device(DeviceObjectID="ESP8266-1", Slot="1", Location="Main Bed Room", GPIOPin=0, Type="Remote", IsLocal=False)
     finally:
         db.close()
 
@@ -35,30 +35,33 @@ def load_hooks():
 
 class RPiCenter:
     def __init__(self):
-        self.__input_channel__ = []
+        self.__input_channel__ = {}
         self.config = config.get_config()
+        GPIO.setmode(eval("GPIO." + str(self.config["gpio_type"])))
+        GPIO.setwarnings(False)
         self.device_name = self.config["device_name"]
-        self.queue = Queue() #<<< this queue is only for sending relay message to a remote device...
+        self.queue = None #<<< this queue is only for sending relay message to a remote device...
 
     def load_channels(self):
-        #self.__input_channel__.append(WebAPI(callback=self.run_command, port=self.config["webapi_port"], address=self.config["webapi_address"]))
-        #self.__input_channel__.append(IR(callback=self.run_command))
-        self.__input_channel__.append(Console(callback=self.run_command))
+        self.__input_channel__.update({'WebAPI': WebAPI(callback=self.run_command, port=self.config["webapi_port"], address=self.config["webapi_address"])})
+        self.__input_channel__.update({'IR': IR(callback=self.run_command)})
+        self.__input_channel__.update({'Console': Console(callback=self.run_command)})
+        #self.__input_channel__.update({'MQTT': MQTT(callback=self.run_command, server=self.config["mqtt_server"],port=self.config["mqtt_port"], subscribe_topic=self.config["mqtt_subscribe"], queue=True)})
 
         # we will use this to communicate with remote device also.
-        _mqtt = MQTT(callback=self.queue.response, server=self.config["mqtt_server"], port=self.config["mqtt_port"], subscribe_topic=self.config["mqtt_subscribe"])
-        self.queue.send_message = _mqtt.send_message
-        self.queue.message_notfound = self.run_command
-        self.__input_channel__.append(_mqtt)
+        _mqtt = MQTT(callback=self.run_command, server=self.config["mqtt_server"], port=self.config["mqtt_port"], subscribe_topic=self.config["mqtt_subscribe"], queue=True)
+        self.__input_channel__.update({'MQTT': _mqtt})
+        self.queue = _mqtt.get_queue()
+        _mqtt.add_event_subscription(event_name='reading/#',callback=commands.get_command('log_sensor_reading'))
 
     def load_devices(self):
         db = rpicenterBL()
         try:
-            data = db.get_devices()
+            data = db.get_Devices()
 
             if data.count() == 0:
                 insert_sample()
-                data = db.get_devices()
+                data = db.get_Devices()
 
             print("=== Loading Devices-Start: " + str(data.count()) + " ===")
             for entry in data:
@@ -74,23 +77,23 @@ class RPiCenter:
         #implement load hooks from DB???
         return load_hooks()
 
-    def run_command(self, msg, input=None, requestID=None):
+    def run_command(self, msg, input=None, requestID=None, *args, **kwargs):
         _result = None
         try:
             _device_name, _method_name, _param = parse_input(str(msg))
-            #print(str(_device_name) + " : " + _method_name + " : " + _param)
 
-            if _device_name == None: 
-                ### call the public method ###
+            if _device_name == None: ### call the public method ###
                 _result = commands.run_command(_method_name, _param)
-            else: 
-                ### call the devices method ###
+            else: ### call the devices method ###
                 _result = devices.run_command(_device_name, _method_name, _param)
 
             if isinstance(_result, Message):
                 _result = self.queue.enqueue(_result)
 
-            if input != None: input.reply(requestID=requestID, msg=_result)
+            _message = kwargs.get('message', None)
+            if _message is not None and isinstance(_message, Message): _message.response = _result
+
+            if input != None: input.reply(requestID=requestID, msg=_result, message=_message)
         except Exception as ex:
             print(str(ex))
             _result = "Err: " + str(ex)
@@ -100,17 +103,13 @@ class RPiCenter:
 
     def run(self):
         try:
-            cfg = config.get_config()
-            GPIO.setmode(eval("GPIO." + str(cfg["gpio_type"])))
-            GPIO.setwarnings(False)
-
             self.load_devices()
             self.load_hooks()
             print("Public Commands: " + str(commands.__commands__))
 
             ### Input Channels ###
             self.load_channels()
-            for input in self.__input_channel__:
+            for key, input in self.__input_channel__.items():
                 i = threading.Thread(target=input.run)
                 i.daemon = True
                 i.start()
@@ -123,10 +122,10 @@ class RPiCenter:
             raise
 
     def cleanup(self):
-        for input in self.__input_channel__:
+        for key, input in self.__input_channel__.items():
             input.cleanup()        
-        self.queue.cleanup()
         devices.cleanup()
+        commands.cleanup()
         GPIO.cleanup()
         time.sleep(0.5)
 
