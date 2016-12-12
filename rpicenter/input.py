@@ -16,7 +16,7 @@ class Message():
     def __init__(self, msg, sender, receiver, on_response=None, on_expiry=None, requestID=None, expiry=60):
         self.msg = msg
         self.sender = sender
-        self.receiver = receiver
+        self.receiver = receiver        
         if requestID is not None:
             self.msg_id = str(requestID)
         else:
@@ -146,7 +146,7 @@ class MQTT(IInput): #make mqtt class to also inherit the queue to simplify the s
                         try:
                             if cb != None: cb(msg=_message.msg, input=self, requestID=_message.msg_id, message=_message)
                         except Exception as ex:
-                            logger.error("MQTT Input Error: " + ex, exc_info=True)
+                            logger.error("MQTT Input Error: " + str(ex), exc_info=True)
                             raise
 
     def publish_msg(self, msg, topic=None):
@@ -208,9 +208,9 @@ class Console(IInput):
                         try:
                             if cb != None: cb(msg=_msg, input=self)
                         except Exception as ex:
-                            logger.error("Console Input Error: " + ex, exc_info=True)
+                            logger.error("Console Input Error: " + str(ex), exc_info=True)
             except Exception as ex:
-                logger.error("Console Input Error: " + ex, exc_info=True)            
+                logger.error("Console Input Error: " + str(ex), exc_info=True)            
                 raise
 
 class IR(IInput):
@@ -255,10 +255,10 @@ class IR(IInput):
 
                                         if command != "Empty": cb(msg=command, input=self)
                                     except Exception as ex:
-                                        logger.error("IR Input Error: " + ex, exc_info=True)
+                                        logger.error("IR Input Error: " + str(ex), exc_info=True)
                                         raise
                 except Exception as ex:
-                    logger.error("IR Input Error: " + ex, exc_info=True)
+                    logger.error("IR Input Error: " + str(ex), exc_info=True)
                     raise
         except KeyboardInterrupt:
             logger.debug("Shutdown requested...exiting IR")
@@ -314,9 +314,9 @@ class WebAPI(IInput):
                         if cb != None: 
                             return cb(msg=command) #do not pass the input param here as synchronus
                     except Exception as ex:
-                        logger.error("WebAPI Input Error: " + ex, exc_info=True)
+                        logger.error("WebAPI Input Error: " + str(ex), exc_info=True)
         except Exception as ex:
-            logger.error("WebAPI Input Error: " + ex, exc_info=True)
+            logger.error("WebAPI Input Error: " + str(ex), exc_info=True)
             raise
 
 
@@ -358,7 +358,7 @@ class Queue:
         message.status =  message.msg_status["WAITING"]
         send_status, response = self.send_message(message)
         if send_status == True and message.on_response == None: #fire and forget
-            self.dequeue(msg.msg_id)
+            self.dequeue(message.msg_id)
 
     def __run_queue__(self):
         while True:
@@ -375,7 +375,7 @@ class Queue:
                         self.expired(msg.msg_id)
                 time.sleep(self.queue_waiting_time)
             except Exception as ex:
-                logger.error("Queue Error: " + ex, exc_info=True)
+                logger.error("Queue Error: " + str(ex), exc_info=True)
 
     def run(self):
         logger.debug("Starting Queue Job...")

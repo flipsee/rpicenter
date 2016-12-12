@@ -90,6 +90,8 @@ class RPiCenter:
                 _result = devices.run_command(_device_name, _method_name, _param)
 
             if isinstance(_result, Message):
+                if _result.sender is None: _result.sender = self.device_name
+                if _result.on_response is None and input is not None: _result.on_response = input.reply
                 _result = self.queue.enqueue(_result)
 
             _message = kwargs.get('message', None)

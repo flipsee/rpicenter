@@ -38,7 +38,11 @@ class DeviceDispatcher:
         if _device is not None: 
             try:     
                 utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)        
-                _result = eval('getattr(_device, method_name)' + param)
+                _func = getattr(_device, method_name, None)
+                if _func is not None:
+                    _result = eval('_func' + param)
+                elif _device.is_local == False:
+                    _result = _device.compose_message(method_name=method_name, param=param) 
                 utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
             except Exception as ex:
                 logger.error(ex, exc_info=True)
