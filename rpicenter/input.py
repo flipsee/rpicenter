@@ -1,9 +1,11 @@
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
-import threading, uuid, time, ast
+import threading, uuid, time, ast, logging
 import paho.mqtt.client as mq
 import lirc
+
+logger = logging.getLogger("rpicenter.input")
 
 class Message():
     msg_status = {'NEW': "New Message in Queue not send yet",
@@ -13,8 +15,8 @@ class Message():
 
     def __init__(self, msg, sender, receiver, on_response=None, on_expiry=None, requestID=None, expiry=60):
         self.msg = msg
-        self.sender = sender.lower()
-        self.receiver = receiver.lower()
+        self.sender = sender
+        self.receiver = receiver
         if requestID is not None:
             self.msg_id = str(requestID)
         else:
@@ -35,7 +37,7 @@ class Message():
             self.on_expiry = self.on_response
 
     def response_received(self, response): #if response is received, parse it and call on_response callback
-        print("i'm in the Message.response")
+        logger.debug("Message.response_received: " + str(response))
         if self.on_response is not None:
             self.status =  self.msg_status["SUCCESS"]
             self.response = response
@@ -103,15 +105,15 @@ class MQTT(IInput): #make mqtt class to also inherit the queue to simplify the s
     def add_event_subscription(self, event_name, callback):
         self.client.subscribe(event_name)
         _event_name = event_name.replace("#", "").replace("+", "")
-        print("Subscribing to: " + _event_name + ", callback: " + str(callback))
+        logger.info("Subscribing to: " + _event_name + ", callback: " + str(callback))
         self.__event_subscriptions__.update({_event_name: callback})
 
     def __client_connect__(self, client, userdata, flags, rc):
-        print("Subscribing to: " + str(self.subscribe_topic))
+        logger.info("Subscribing to: " + str(self.subscribe_topic))
         self.client.subscribe(self.subscribe_topic)
 
     def __client_message__(self, client, userdata, msg):
-        print("MQTT Received Topic: " + msg.topic + " Msg: " + str(msg.payload))
+        logger.debug("MQTT Received Topic: " + msg.topic + " Msg: " + str(msg.payload))
         _msg = msg.payload.decode(encoding="utf-8", errors="ignore")
 
         _found_in_subscription = False
@@ -119,11 +121,11 @@ class MQTT(IInput): #make mqtt class to also inherit the queue to simplify the s
             if msg.topic.startswith(key):
                 _found_in_subscription = True
                 try:
-                    print(ast.literal_eval(_msg))
+                    #print(ast.literal_eval(_msg))
                     callback(**ast.literal_eval(_msg))
                     return
                 except Exception as ex:
-                    print("MQTT Subscription Error: " + str(ex))
+                    logger.error(ex, exc_info=True)
                     raise
 
         if _found_in_subscription == False:
@@ -144,25 +146,26 @@ class MQTT(IInput): #make mqtt class to also inherit the queue to simplify the s
                         try:
                             if cb != None: cb(msg=_message.msg, input=self, requestID=_message.msg_id, message=_message)
                         except Exception as ex:
-                            print("MQTT Input Error: " + str(ex))
+                            logger.error("MQTT Input Error: " + ex, exc_info=True)
                             raise
 
     def publish_msg(self, msg, topic=None):
         _topic = self.publish_topic
         if topic is not None: _topic = topic        
-
-        print("MQTT Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
+        logger.debug("MQTT Publishing Message Topic: " + str(topic) + " Msg: " + str(msg))
         self.client.publish(_topic, str(msg))
 
     def send_message(self, message):
         try:
-            self.reply(message)
+            self.reply(message=message)
             return True, "Message sent"
-        except:
+        except Exception as ex:
+            logger.error(ex, exc_info=True)
             return False, "Failed to send message"
 
     def reply(self, **kwargs):
         _message = kwargs.get('message', None)
+        logger.debug("Mqtt sendng Msg: " + str(_message))
         """ {ESP8266}/inbox/{RPiCenter}/{Date Time}/{Trx ID} """
         if _message is not None and isinstance(_message, Message):
             _topic = _message.receiver + "/inbox/" + _message.sender + "/" + str(_message.msg_timestamp) + "/" + str(_message.msg_id)
@@ -171,15 +174,15 @@ class MQTT(IInput): #make mqtt class to also inherit the queue to simplify the s
                 _msg = _message.response
             else:
                 _msg = _message.msg
-            print("MQTT Publishing Message Topic: " + str(_topic) + " Msg: " + str(_msg))
+            logger.debug("MQTT Publishing Message Topic: " + str(_topic) + " Msg: " + str(_msg))
             self.client.publish(_topic, str(_msg))
 
     def run(self):
-        print("Starting MQTT Input...")
+        logger.info("Starting MQTT Input...")
         try:
             if self.client is not None: self.client.loop_start()
         except Exception as ex:
-            print("MQTT Input Error: " + str(ex))
+            logger.error(ex, exc_info=True)
 
     def cleanup(self):
         super(MQTT, self).cleanup()
@@ -193,7 +196,7 @@ class Console(IInput):
 
     def run(self):
         self.__flagstop__ = False
-        print("Starting Console Input...")
+        logger.info("Starting Console Input...")
 
         while True:
             if self.__flagstop__: return
@@ -205,9 +208,9 @@ class Console(IInput):
                         try:
                             if cb != None: cb(msg=_msg, input=self)
                         except Exception as ex:
-                            print("Console Input Error: " + str(ex))
+                            logger.error("Console Input Error: " + ex, exc_info=True)
             except Exception as ex:
-                print("Console Input Error: " + str(ex))            
+                logger.error("Console Input Error: " + ex, exc_info=True)            
                 raise
 
 class IR(IInput):
@@ -229,7 +232,7 @@ class IR(IInput):
 
     def run(self):
         self.__flagstop__ = False
-        print("Starting IR Input...")
+        logger.info("Starting IR Input...")
         try:
             sockid = lirc.init("rpicenter", blocking = False)
 
@@ -241,24 +244,24 @@ class IR(IInput):
                     codeIR = lirc.nextcode()
                     if codeIR:
                         action = codeIR[0]
-                        print("IR Input Received: " + action)
+                        logger.debug("IR Input Received: " + action)
                         if (self.__callback__ != None):
                             for cb in self.__callback__:
                                 if cb != None:
                                     try:
                                         #find the command from the dict
                                         command = self.__remote_command__.get(action,"Empty")
-                                        print("IR Remote Command: " + str(command))
+                                        logger.debug("IR Remote Command: " + str(command))
 
                                         if command != "Empty": cb(msg=command, input=self)
                                     except Exception as ex:
-                                        print("IR Input Error: " + str(ex))
+                                        logger.error("IR Input Error: " + ex, exc_info=True)
                                         raise
                 except Exception as ex:
-                    print("IR Input Error: " + str(ex))
+                    logger.error("IR Input Error: " + ex, exc_info=True)
                     raise
         except KeyboardInterrupt:
-            print("Shutdown requested...exiting IR")
+            logger.debug("Shutdown requested...exiting IR")
             raise
 
 class WebAPI(IInput):
@@ -270,7 +273,7 @@ class WebAPI(IInput):
         self.routes() #load all the routes
 
     def run(self):
-        print("Starting WebAPI Input...")
+        logger.info("Starting WebAPI Input...")
         self.app.run(host=self.webapi_address, port=self.webapi_port, debug=True, use_reloader=False)
     
     def cleanup(self):
@@ -311,9 +314,9 @@ class WebAPI(IInput):
                         if cb != None: 
                             return cb(msg=command) #do not pass the input param here as synchronus
                     except Exception as ex:
-                        print("WebAPI Input Error: " + str(ex))
+                        logger.error("WebAPI Input Error: " + ex, exc_info=True)
         except Exception as ex:
-            print("WebAPI Input Error: " + str(ex))
+            logger.error("WebAPI Input Error: " + ex, exc_info=True)
             raise
 
 
@@ -329,42 +332,27 @@ class Queue:
         self.queue_waiting_time = 15
 
     def enqueue(self, message): #add msg to queue
-        print("add Msg to Queue")
         if isinstance(message, Message):
             self.queue.setdefault(message.msg_id, message)
             print(str(self.queue))
             self.queue_flagstop = False
             self.run()
             return "Message Queued, MsgID: " + message.msg_id
-        else: return "Message Queue is invalid"
+        else: return "Message is invalid"
 
     def dequeue(self, msg_id): #remove msg from queue manually
         return self.queue.pop(msg_id, None)
         
     def expired(self, msg_id): #if max retries reach or message expired we remove it from the queue, run on on_expired
         message = self.queue.pop(msg_id, None)
-        print("Expired Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
+        logger.debug("Expired Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
         if message is not None:
             message.status =  message.msg_status["EXPIRED"]
             if message.on_expiry is not None: return message.on_expiry(message)
         return
 
-    #def response(self, msg, requestID, *args, **kwargs): #if response is received, parse it and call on_response, remove it from the queue.
-    #    _message = self.queue.pop(requestID, None)
-    #    if _message is not None:
-    #        if _message.on_response is not None:
-    #            _message.status =  _message.msg_status["SUCCESS"]
-    #            _message.response = msg
-    #            _old_sender = _message.sender
-    #            _message.sender = _message.receiver
-    #            _message.receiver = _old_sender
-    #            return _message.on_response(_message)
-    #        else: return
-    #    else: #this is a new message received from the sender, lets parse it and create new message object to pass arround
-    #        return self.message_notfound(msg=msg, requestID=requestID, *args, **kwargs)
-
     def send(self, message):
-        print("Sending Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
+        logger.debug("Sending Msg:" + message.msg_id + " " +  message.status + " " + str(message.last_retry))
         message.retry_count = message.retry_count + 1
         message.last_retry = datetime.now()
         message.status =  message.msg_status["WAITING"]
@@ -374,20 +362,23 @@ class Queue:
 
     def __run_queue__(self):
         while True:
-            #lets check if there is an item in the queue if not stop.
-            if len(self.queue) < 1 or self.queue_flagstop == True: 
-                print("Stoping Queue Job...")
-                return
-            for key, msg in list(self.queue.items()):
-                #check which one need tobe send
-                if msg.status == msg.msg_status["NEW"] or (msg.retry_count <= self.max_retry and msg.last_retry + timedelta(seconds=self.retry_waiting_time) <= datetime.now()):
-                    self.send(msg)
-                elif msg.retry_count > self.max_retry or msg.msg_expiry < datetime.now():
-                    self.expired(msg.msg_id)
-            time.sleep(self.queue_waiting_time)
+            try:
+                #lets check if there is an item in the queue if not stop.
+                if len(self.queue) < 1 or self.queue_flagstop == True: 
+                    logger.debug("Stoping Queue Job...")
+                    return
+                for key, msg in list(self.queue.items()):
+                    #check which one need tobe send
+                    if msg.status == msg.msg_status["NEW"] or (msg.retry_count <= self.max_retry and msg.last_retry + timedelta(seconds=self.retry_waiting_time) <= datetime.now()):
+                        self.send(msg)
+                    elif msg.retry_count > self.max_retry or msg.msg_expiry < datetime.now():
+                        self.expired(msg.msg_id)
+                time.sleep(self.queue_waiting_time)
+            except Exception as ex:
+                logger.error("Queue Error: " + ex, exc_info=True)
 
     def run(self):
-        print("Starting Queue Job...")
+        logger.debug("Starting Queue Job...")
         self.queue_thread = threading.Thread(target=self.__run_queue__)
         if self.queue_thread is not None and self.queue_thread.isAlive() == False:
             self.queue_thread.start()

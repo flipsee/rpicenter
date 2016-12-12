@@ -1,11 +1,13 @@
 import RPi.GPIO as GPIO
-import threading, time, inspect
+import threading, time, inspect, logging
 import config 
 from rpicenterModel import *
 from input import MQTT, Console, IR, WebAPI, Message, Queue
 from utils import parse_input
 from devices import devices
 from commands import commands
+
+logger = logging.getLogger("rpicenter")
 
 #1. load all devices from db.
 #2. load recipies.
@@ -26,12 +28,12 @@ def insert_sample():
         db.close()
 
 def load_hooks():
-    print("=== Adding Hooks ===")        
+    logger.debug("=== Adding Hooks ===")        
     RedLed = devices.get_device("RedLed")
     RedLed.add_hook("POST_on", "run_command('GreenLed.off')")
     RedLed.add_hook("POST_off", "run_command('GreenLed.on')")
     Btn = devices.get_device("Btn")
-    Btn.add_callback(lambda: run_command('RedLed.toggle'))
+    Btn.add_callback(lambda: rpicenter.run_command('RedLed.toggle'))
 
 class RPiCenter:
     def __init__(self):
@@ -63,12 +65,12 @@ class RPiCenter:
                 insert_sample()
                 data = db.get_Devices()
 
-            print("=== Loading Devices-Start: " + str(data.count()) + " ===")
+            logger.debug("=== Loading Devices-Start: " + str(data.count()) + " ===")
             for entry in data:
-                print("Device:" + entry.DeviceObjectID)
+                logger.debug("Device:" + entry.DeviceObjectID)
                 devices.add_device(device_object_id=entry.DeviceObjectID, slot=entry.Slot, gpio_pin=entry.GPIOPin, location=entry.Location, is_local=entry.IsLocal, type=entry.Type)
         except Exception as ex:
-            print("Error loading Devices: " + str(ex))
+            logger.error(ex, exc_info=True)
             raise
         finally:
             db.close()
@@ -95,8 +97,8 @@ class RPiCenter:
 
             if input != None: input.reply(requestID=requestID, msg=_result, message=_message)
         except Exception as ex:
-            print(str(ex))
-            _result = "Err: " + str(ex)
+            logger.error(ex, exc_info=True)
+            _result = "Unable to run the command: " + str(msg)
             raise
         finally:
             return _result
@@ -105,7 +107,7 @@ class RPiCenter:
         try:
             self.load_devices()
             self.load_hooks()
-            print("Public Commands: " + str(commands.__commands__))
+            #print("Public Commands: " + str(self.run_command("list_commands")))
 
             ### Input Channels ###
             self.load_channels()
@@ -118,7 +120,7 @@ class RPiCenter:
             while True:
                 pass
         except Exception as ex:
-            print("Err: " + str(ex))
+            logger.error(ex, exc_info=True)
             raise
 
     def cleanup(self):

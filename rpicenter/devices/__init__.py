@@ -1,12 +1,13 @@
 import RPi.GPIO as GPIO
-import sys, os, glob, inspect, importlib
+import sys, os, glob, inspect, importlib, logging
 import utils
 from devices.device import Device
+
+logger = logging.getLogger("rpicenter.devices")
 
 class DeviceDispatcher:
     def __init__(self):
         self.__devices__ = {}
-        self.__device_list__ = {}
         self.__hooks__ = {}
 
     def add_device(self, device_object_id=None, slot=None, gpio_pin=None, location=None, type=None, is_local=True, device=None):
@@ -21,8 +22,7 @@ class DeviceDispatcher:
 
     def register_device(self, device=None):
         if isinstance(device, Device):
-            self.__devices__.setdefault(device.device_object_id, device)
-            self.__device_list__.setdefault(device.device_object_id, device.commands)
+            self.__devices__.setdefault(device.device_object_id, [device, device.commands])
         return device
 
     def is_device_exists(self, device_object_id):
@@ -32,32 +32,18 @@ class DeviceDispatcher:
             return False
 
     def run_command(self, device_object_id, method_name, param, *args, **kwargs):
-        #print("devices run command called: " + device_object_id)
+        logger.debug("devices run command called: " + device_object_id)
         _result = None
         _device = self.get_device(str(device_object_id))
         if _device is not None: 
-            if _device.is_local == True:
-                try:     
-                    utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)        
-                    _result = eval('getattr(_device, method_name)' + param)
-                    utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
-                except Exception as ex:
-                    print(str(ex))
-                    _result = "Err: " + str(ex) 
-                    raise
-            elif _device.is_local == False:
-                print("Remote Device")
-                try:
-                    utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)
-                    _result = eval('getattr(_device, method_name)' + param)               
-                    # _topic, _message = _device.compose_message(method_name, param)
-                    #print("Topic: " + _topic + ",Msg: " + _message)
-                    #self.relay_channel.publish_msg(topic=_topic, msg=_message)
-                    utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
-                except Exception as ex:
-                    print(str(ex))
-                    _result = "Err: " + str(ex)
-                    raise
+            try:     
+                utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)        
+                _result = eval('getattr(_device, method_name)' + param)
+                utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
+            except Exception as ex:
+                logger.error(ex, exc_info=True)
+                _result = "Err: " + str(ex) 
+                raise
         else: 
             _result = "Unable to find Device: " + device_object_id
         return _result
@@ -67,15 +53,23 @@ class DeviceDispatcher:
         return
 
     def get_device(self, device_object_id):    
-        return self.__devices__.get(device_object_id, None)
+        _device = self.__devices__.get(device_object_id, None)
+        if _device is not None: 
+            return _device[0]
+        else: 
+            return None
 
     def list_devices(self):
-        return self.__device_list__
+        _device_list = {}
+        for key, d in self.__devices__.items():
+            _device_list.update({key: d[1]})
+        return _device_list
 
     def cleanup(self):        
         for key, d in self.__devices__.items():
-            d.cleanup()
+            (d[0]).cleanup()
         self.__devices__ = None
+        self.__hooks__ = None
         GPIO.cleanup()
 
 # Create singleton

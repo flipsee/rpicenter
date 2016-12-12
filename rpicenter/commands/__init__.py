@@ -1,20 +1,19 @@
-import sys, os, glob, inspect, importlib
 from functools import wraps
+import sys, os, glob, inspect, importlib, logging
 import utils
+
+logger = logging.getLogger("rpicenter.commands")
 
 class CommandDispatcher:
     def __init__(self):
         self.__commands__ = {}
-        self.__command_list__ = {}
         self.__hooks__ = {}
     
     def register(self, *args):
         def wrapper(func):
-            #print("Registering: " + func.__name__ + " Key: " + str(keyword))
-            self.__commands__[func.__name__] = func
-            self.__command_list__[func.__name__] = str(func.__doc__)
+            logger.debug("Registering: " + func.__name__)
+            self.__commands__[func.__name__] = [func, str(func.__doc__)]
             return func
-
         # If there is one (and only one) positional argument and this argument is callable,
         # assume it is the decorator (without any optional keyword arguments)
         if len(args) == 1 and callable(args[0]):
@@ -23,11 +22,10 @@ class CommandDispatcher:
             return wrapper
 
     def run_command(self, method_name, param, *args, **kwargs):
-        #print("Running Public Command: " + method_name)
+        logger.debug("Running Public Command: " + method_name)
         _result = None
         try:
-            _func =  self.__commands__.get(method_name, None)
-            #print(str(_func))
+            _func =  self.get_command(method_name)
             if _func != None:
                 utils.run_hooks(self.__hooks__, "PRE_" + method_name)
                 _result = eval('_func' + param)
@@ -44,15 +42,20 @@ class CommandDispatcher:
         self.__hooks__.update({key: func})
 
     def cleanup(self):
-        self.__commands__ = {}
-        self.__command_list__ = {}
-        self.__hooks__ = {}
+        self.__commands__ = None
+        self.__hooks__ = None
 
     def get_command(self, method_name):
-        return self.__commands__.get(method_name, None)
+        _command = self.__commands__.get(method_name, None)
+        if _command is not None:
+            return _command[0]
+        else: return None
 
-    def get_commands(self):
-        return self.__command_list__
+    def list_commands(self):
+        _command_list = {}
+        for key, d in self.__commands__.items():
+            _command_list.update({key: d[1]})
+        return _command_list
 
 commands = CommandDispatcher()
 

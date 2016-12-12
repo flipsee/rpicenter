@@ -31,26 +31,27 @@ class Display(Device):
 
         # Load default font.
         self.font = ImageFont.load_default()
-        #print("Initiating Display")
 
     @command
     def clear(self):
         # Clear display.
-        #print("Clearing Display")
-        self.disp.clear()
-        self.disp.display()    
+        logger.debug("Clearing Display")
+        self.cleanup()
 
     @command
     def show_message(self, msg, x=1, y=1):
-        #print("Showing Msg")
+        logger.debug("Showing Msg: " + str(msg))
         self.draw.text((x, y), str(msg),  font=self.font, fill=255)
-        self.__display__()
+        self.disp.display()
+        #self.__display__()
 
     @command
     def show_image(self, imgName):
-        #print("Showing Image")
+        logger.debug("Showing Image: " + str(imgName))
         self.image = Image.open(imgName).resize((self.disp.width, self.disp.height), Image.ANTIALIAS).convert('1')
-        self.__display__()
+        self.disp.image(self.image)
+        self.disp.display()
+        #self.__display__()
     
     def cleanup(self):
         self.disp.clear()

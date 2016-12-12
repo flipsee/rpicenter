@@ -1,7 +1,7 @@
 from devices.device import Device, command
 from datetime import datetime
 import RPi.GPIO as GPIO
-import threading
+import threading, time
 
 class Led(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):
@@ -36,17 +36,21 @@ class Led(Device):
             self.on()
         
     @command
-    def blink(self, repetition, interval):
+    def blink(self, repetition=3, interval=1):
         print("Device " + self.device_object_id + " Loop starting...")
-        self.thread = threading.Thread(target=self.__blink__, kwargs=kwargs)
+        _repetition = repetition * 2
+        self.thread = threading.Thread(target=self.__blink__, args=(_repetition,interval))
         if self.thread.isAlive() == False:
             self.thread.start()
 
     def __blink__(self, repetition, interval):
+        _old_state = self.state
         self.__flagstop__ = False
         counter = 0
-        while counter < repetition:
-            if self.__flagstop__: return
+        while True:
+            if counter >= repetition or self.__flagstop__: 
+                self.__change_state__(_old_state) #assign old state
+                return
             counter += 1
             self.toggle() 
             time.sleep(interval)

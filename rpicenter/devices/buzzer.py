@@ -58,18 +58,3 @@ class Buzzer(Device):
 
         self.__beep__(cycles=cycles, delay=delay)
 
-        #for i in range(cycles): #start a loop from 0 to the variable “cycles” calculated above
-        #    self.__beep__(delay=delay)
-
-#pin = 21
-#GPIO.cleanup()
-#GPIO.setmode(GPIO.BCM)
-#GPIO.setup(pin, GPIO.OUT)
-
-#while True:
-#    print("True")
-#    GPIO.output(pin, True)
-#    time.sleep(2)
-#    print("False")
-#    GPIO.output(pin, False)
-#    time.sleep(2)
