@@ -1,5 +1,5 @@
 import RPi.GPIO as GPIO
-import sys, os, glob, inspect, importlib, logging
+import sys, os, glob, inspect, importlib, logging, ast
 import utils
 from devices.device import Device
 
@@ -39,8 +39,11 @@ class DeviceDispatcher:
             try:     
                 utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)        
                 _func = getattr(_device, method_name, None)
-                if _func is not None:
-                    _result = eval('_func' + param)
+                if _func is not None and param is not None:
+                    #_result = eval('_func' + param)
+                    _result = _func(ast.literal_eval(param))
+                elif _func is not None and param is None:
+                    _result = _func()
                 elif _device.is_local == False:
                     _result = _device.compose_message(method_name=method_name, param=param) 
                 utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)

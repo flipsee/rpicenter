@@ -15,15 +15,16 @@ def parse_input(msg=None):
         _device_name = str(cmd[:_classidx])
         if _paramidx < 0: # means that it doesn't have any param
             _method_name = str(cmd[(_classidx + 1):])
-            _param = "()"
+            #_param = "()"
         else:
             if _paramidx < _classidx:
                 _method_name = str(cmd[0:_paramidx])
             else:
                 _method_name = str(cmd[(_classidx + 1):_paramidx])
-            _param = str(cmd[_paramidx:len(cmd)])
+            #_param = str(cmd[_paramidx:len(cmd)])
+            _param = str(cmd[_paramidx +1 :len(cmd) -1])
 
-        logger.debug(_device_name + " : " + _method_name + " : " + _param)
+        logger.debug(_device_name + " : " + _method_name + " : " + str(_param))
         if _classidx < 0 or (_paramidx >= 0 and _paramidx < _classidx): _device_name = None
     return _device_name, _method_name, _param
 
@@ -37,7 +38,8 @@ def run_hooks(hooks, key=None, *args, **kwargs):
                 if h_key == key or key == None: 
                     logger.debug("Running: " + str(key) + " ; " + str(h_value))
                     try:
-                        eval(h_value)
+                        #eval(h_value)
+                        h_value()
                     except Exception as ex:
                         print(str(ex))
                         raise

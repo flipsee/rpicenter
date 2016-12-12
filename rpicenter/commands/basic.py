@@ -2,6 +2,7 @@ import logging
 from commands import commands
 from devices import devices
 from rpicenterModel import *
+import rpicenter
 
 logger = logging.getLogger("rpicenter.commands.basic")
 
@@ -23,8 +24,9 @@ def list_commands():
 @commands.register
 def show_temp_to_screen():
     """ get the temperature and display it on screen """
-    temp = devices.run_command("TempSensor.temperature")
-    devices.run_command("Display.show_message('" + str(temp) + "')") 
+    run_command = rpicenter.rpicenter.run_command
+    temp = run_command("TempSensor.temperature")
+    run_command("Display.show_message('" + str(temp) + "')") 
 
 @commands.register
 def log_sensor_reading(device_object_id, reading_datetime, parameter, value, unit):

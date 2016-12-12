@@ -225,7 +225,7 @@ class IR(IInput):
             'KEY_8': 'lambda: Display.show_message(TempSensor.temperature())',
             'KEY_9': 'Display.show_message(run_command("TempSensor.temperature"))',
             'KEY_UP': 'show_temp_to_screen',
-            'KEY_DOWN': 'Display.show_message(Btn.get_laststatechange())'}
+            'KEY_DOWN': 'Display.show_message(rpicenter.run_command("Btn.get_laststatechange"))'}
 
     def __init__(self, callback=None):
         super(IR, self).__init__(callback)

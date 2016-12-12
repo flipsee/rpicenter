@@ -1,10 +1,10 @@
 from devices.device import Device, command
-import time
+import time, logging
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_SSD1306
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger("rpicenter.devices.display")
 
 class Display(Device):
     # Raspberry Pi pin configuration:
@@ -42,16 +42,16 @@ class Display(Device):
     def show_message(self, msg, x=1, y=1):
         logger.debug("Showing Msg: " + str(msg))
         self.draw.text((x, y), str(msg),  font=self.font, fill=255)
-        self.disp.display()
-        #self.__display__()
+        #self.disp.display()
+        self.__display__()
 
     @command
     def show_image(self, imgName):
         logger.debug("Showing Image: " + str(imgName))
         self.image = Image.open(imgName).resize((self.disp.width, self.disp.height), Image.ANTIALIAS).convert('1')
-        self.disp.image(self.image)
-        self.disp.display()
-        #self.__display__()
+        #self.disp.image(self.image)
+        #self.disp.display()
+        self.__display__()
     
     def cleanup(self):
         self.disp.clear()
