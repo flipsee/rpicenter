@@ -16,8 +16,8 @@ def main():
         log_level = logging.INFO
     else:
         log_level = logging.WARNING
-    #logging.basicConfig(filename='rpicenter.log', level=log_level, format=LOG_FORMAT)
-    logging.basicConfig(level=log_level, format=LOG_FORMAT)
+    logging.basicConfig(filename='rpicenter.log', level=log_level, format=LOG_FORMAT)
+    #logging.basicConfig(level=log_level, format=LOG_FORMAT)
 
     from rpicenter import rpicenter
 

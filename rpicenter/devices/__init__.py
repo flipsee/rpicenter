@@ -40,7 +40,6 @@ class DeviceDispatcher:
                 utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)        
                 _func = getattr(_device, method_name, None)
                 if _func is not None and param is not None:
-                    #_result = eval('_func' + param)
                     _result = _func(ast.literal_eval(param))
                 elif _func is not None and param is None:
                     _result = _func()

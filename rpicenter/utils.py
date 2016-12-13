@@ -38,7 +38,6 @@ def run_hooks(hooks, key=None, *args, **kwargs):
                 if h_key == key or key == None: 
                     logger.debug("Running: " + str(key) + " ; " + str(h_value))
                     try:
-                        #eval(h_value)
                         h_value()
                     except Exception as ex:
                         print(str(ex))

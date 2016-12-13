@@ -28,7 +28,6 @@ class CommandDispatcher:
             _func =  self.get_command(method_name)
             if _func != None:
                 utils.run_hooks(self.__hooks__, "PRE_" + method_name)
-                #_result = eval('_func' + param)
                 if param is not None:
                     _result = _func(ast.literal_eval(param))
                 else:
