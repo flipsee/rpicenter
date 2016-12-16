@@ -7,6 +7,7 @@ def main():
     parser = argparse.ArgumentParser(prog='rpicenter', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-d', '--debug', action='store_true', help=('log detailed debugging messages'))
     parser.add_argument('-i', '--info', action='store_true', help=('log info messages'))
+    parser.add_argument('-l', '--log', action='store_true', help=('log into a file instead to screen'))
     args = parser.parse_args()
 
     # Configure logging
@@ -16,8 +17,11 @@ def main():
         log_level = logging.INFO
     else:
         log_level = logging.WARNING
-    logging.basicConfig(filename='rpicenter.log', level=log_level, format=LOG_FORMAT)
-    #logging.basicConfig(level=log_level, format=LOG_FORMAT)
+
+    if args.log:
+        logging.basicConfig(filename='rpicenter.log', level=log_level, format=LOG_FORMAT)
+    else:
+        logging.basicConfig(level=log_level, format=LOG_FORMAT)
 
     from rpicenter import rpicenter
 

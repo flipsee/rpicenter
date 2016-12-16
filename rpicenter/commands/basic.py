@@ -25,8 +25,8 @@ def list_commands():
 def show_temp_to_screen():
     """ get the temperature and display it on screen """
     run_command = rpicenter.rpicenter.run_command
-    temp = run_command("TempSensor.temperature")
-    run_command("Display.show_message('" + str(temp) + "')") 
+    temp = run_command("TempSensor.get_temperature")
+    run_command("Display.show_message('" + str(temp) + " C')") 
 
 @commands.register
 def log_sensor_reading(device_object_id, reading_datetime, parameter, value, unit):

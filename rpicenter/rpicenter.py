@@ -33,7 +33,7 @@ def load_hooks():
     RedLed.add_hook("POST_on", "run_command('GreenLed.off')")
     RedLed.add_hook("POST_off", "run_command('GreenLed.on')")
     Btn = devices.get_device("Btn")
-    Btn.add_callback(lambda: rpicenter.run_command('RedLed.toggle'))
+    Btn.add_callback("run_command('RedLed.toggle')")
 
 class RPiCenter:
     def __init__(self):

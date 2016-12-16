@@ -30,7 +30,8 @@ class Display(Device):
         self.draw.rectangle((0,0,self.disp.width,self.disp.height), outline=0, fill=0)
 
         # Load default font.
-        self.font = ImageFont.load_default()
+        #self.font = ImageFont.load_default()
+        self.font = ImageFont.truetype('/usr/share/fonts/truetype/roboto/Roboto-Thin.ttf', 16)
 
     @command
     def clear(self):

@@ -40,11 +40,16 @@ class DeviceDispatcher:
                 utils.run_hooks(self.__hooks__, "PRE_" + device_object_id + "." + method_name)        
                 _func = getattr(_device, method_name, None)
                 if _func is not None and param is not None:
-                    _result = _func(ast.literal_eval(param))
+                    try:
+                        _result = _func(ast.literal_eval(param))
+                    except ValueError:
+                        _result = _func(param)
                 elif _func is not None and param is None:
                     _result = _func()
                 elif _device.is_local == False:
                     _result = _device.compose_message(method_name=method_name, param=param) 
+                else:
+                    _result = "Invalid Command!"
                 utils.run_hooks(self.__hooks__, "POST_" + device_object_id + "." + method_name)
             except Exception as ex:
                 logger.error(ex, exc_info=True)

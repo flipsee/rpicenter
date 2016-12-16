@@ -38,7 +38,7 @@ def run_hooks(hooks, key=None, *args, **kwargs):
                 if h_key == key or key == None: 
                     logger.debug("Running: " + str(key) + " ; " + str(h_value))
                     try:
-                        h_value()
+                        exec(h_value)
                     except Exception as ex:
                         print(str(ex))
                         raise
@@ -46,7 +46,7 @@ def run_hooks(hooks, key=None, *args, **kwargs):
             for item in hooks:
                 try:
                     logger.debug("Running: " + str(item))
-                    item()
+                    exec(item)
                 except Exception as ex:
                     logger.error(ex, exc_info=True)
                     raise

@@ -15,12 +15,12 @@ class DHT(Device):
         self._read_interval = self.min_read_interval
 
     @command
-    def temperature(self):
+    def get_temperature(self):
         self.__run_sensor__()
         return self._temperature
 
     @command
-    def humidity(self):
+    def get_humidity(self):
         self.__run_sensor__()
         return self._humidity
 

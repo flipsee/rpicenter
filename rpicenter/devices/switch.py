@@ -1,7 +1,10 @@
-import RPi.GPIO as GPIO
-from datetime import datetime
 from devices.device import Device, command
 import utils
+import logging
+import RPi.GPIO as GPIO
+from datetime import datetime
+
+logger = logging.getLogger("rpicenter.devices.switch")
 
 class Switch(Device):
     def __init__(self, device_object_id, slot, gpio_pin, location, is_local=True):

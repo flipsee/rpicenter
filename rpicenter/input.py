@@ -222,9 +222,9 @@ class IR(IInput):
             'KEY_5': 'BlueLed.off',
             'KEY_6': 'Display.show_message("Hello World")',
             'KEY_7': 'Display.clear',
-            'KEY_8': 'lambda: Display.show_message(TempSensor.temperature())',
-            'KEY_9': 'Display.show_message(run_command("TempSensor.temperature"))',
-            'KEY_UP': 'show_temp_to_screen',
+            'KEY_8': 'show_temp_to_screen',
+            'KEY_9': 'Display.show_message(TempSensor.temperature())',
+            'KEY_UP': 'Display.show_message(run_command("TempSensor.temperature"))',
             'KEY_DOWN': 'Display.show_message(rpicenter.run_command("Btn.get_laststatechange"))'}
 
     def __init__(self, callback=None):

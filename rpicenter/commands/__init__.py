@@ -29,12 +29,15 @@ class CommandDispatcher:
             if _func != None:
                 utils.run_hooks(self.__hooks__, "PRE_" + method_name)
                 if param is not None:
-                    _result = _func(ast.literal_eval(param))
+                    try:
+                        _result = _func(ast.literal_eval(param))
+                    except ValueError:
+                        _result = _func(param)
                 else:
                     _result = _func()
                 utils.run_hooks(self.__hooks__, "POST_" + method_name)
             else: 
-                _result = "Unknown Command! "
+                _result = "Invalid Command!"
         except Exception as ex:
             _result = "Err: " + str(ex)
             raise
